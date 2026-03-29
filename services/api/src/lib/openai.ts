@@ -1,0 +1,94 @@
+import OpenAI from "openai";
+import { config } from "./config";
+import type { ProductAiAnalysis } from "../types/domain";
+
+const client = new OpenAI({
+  apiKey: config.openAiApiKey,
+});
+
+const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (estilo INCI Beauty), nutricionista clínico y auditor de responsabilidad social corporativa. Tu objetivo es procesar una imagen de una etiqueta y devolver un JSON estricto.
+
+### DIRECTRICES DE EVALUACIÓN:
+1. **Puntaje (0-20):** - 18-20: Ingredientes puros, sin EDC, empresa ética.
+   - 14-17: Buen producto, algunos aditivos menores o envase plástico.
+   - 08-13: Presencia de disruptores endocrinos (EDC) o alertas laborales.
+   - 0-07: Ultraprocesados nocivos, químicos agresivos o escándalos graves de derechos humanos.
+2. **Disruptores Endocrinos (EDC):** Identifica específicamente: Ftalatos, Bisfenoles (BPA/S), Parabenos, Benzofenonas, Triclosán, BHT/BHA y liberadores de Formaldehído.
+3. **Ética Laboral:** Utiliza tu base de datos interna para buscar antecedentes de la marca (ej. casos de maltrato, huelgas, certificaciones Empresa B).
+
+### FORMATO DE RESPUESTA (JSON):
+{
+  "producto": {
+    "nombre": "Nombre comercial",
+    "marca": "Nombre de la empresa",
+    "categoria": "Alimento / Cosmético / Aseo",
+    "puntaje_global": 0-20
+  },
+  "analisis_quimico": [
+    {"ingrediente": "nombre", "funcion": "para qué sirve", "calificacion": "bueno/regular/riesgo"}
+  ],
+  "alertas": {
+    "endocrinas": ["lista de EDCs encontrados"],
+    "salud": "explicación breve de riesgos nutricionales o dermatológicos",
+    "etica_laboral": "resumen de comportamiento corporativo de la marca"
+  },
+  "veredicto": "Resumen ejecutivo de 2 frases con tono empático pero directo",
+  "recomendacion": "Una acción concreta para el usuario"
+}`;
+
+function safeJsonParse(raw: string): ProductAiAnalysis {
+  try {
+    const parsed = JSON.parse(raw) as ProductAiAnalysis;
+    if (!parsed?.producto?.nombre) {
+      throw new Error("Missing producto.nombre");
+    }
+    return parsed;
+  } catch {
+    throw new Error("OpenAI response was not valid JSON");
+  }
+}
+
+export async function analyzeProductImageWithOpenAI(
+  imageBytes: Buffer,
+): Promise<ProductAiAnalysis> {
+  const imageDataUrl = `data:image/jpeg;base64,${imageBytes.toString("base64")}`;
+
+  const completion = await client.responses.create({
+    model: config.openAiModel,
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: SYSTEM_PROMPT }],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "Analiza esta etiqueta y responde SOLO con JSON válido según el formato.",
+          },
+          {
+            type: "input_image",
+            image_url: imageDataUrl,
+            detail: "high",
+          },
+        ],
+      },
+    ],
+    text: { format: { type: "json_object" } },
+  });
+
+  const text = completion.output_text?.trim();
+  if (!text) {
+    throw new Error("OpenAI did not return output_text");
+  }
+
+  const result = safeJsonParse(text);
+  if (result.producto.puntaje_global < 0) {
+    result.producto.puntaje_global = 0;
+  }
+  if (result.producto.puntaje_global > 20) {
+    result.producto.puntaje_global = 20;
+  }
+  return result;
+}

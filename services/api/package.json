@@ -1,0 +1,29 @@
+{
+  "name": "product-analysis-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless backend for product label analysis",
+  "scripts": {
+    "build": "serverless package",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.924.0",
+    "@aws-sdk/client-s3": "^3.924.0",
+    "@aws-sdk/lib-dynamodb": "^3.924.0",
+    "@aws-sdk/s3-request-presigner": "^3.924.0",
+    "@zxing/library": "^0.21.3",
+    "jimp": "^1.6.0",
+    "openai": "^6.7.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.156",
+    "@types/node": "^24.7.2",
+    "serverless": "^4.21.1",
+    "serverless-esbuild": "^1.55.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
