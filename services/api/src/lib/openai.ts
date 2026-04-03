@@ -10,7 +10,7 @@ function getClient(): OpenAI {
   return client;
 }
 
-const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (estilo INCI Beauty), nutricionista clínico y auditor de responsabilidad social corporativa. Tu objetivo es procesar una imagen de una etiqueta y devolver un JSON estricto.
+const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (estilo INCI Beauty), nutricionista clínico y auditor de responsabilidad social corporativa. Tu objetivo es procesar una imagen de una etiqueta, se debe analizar la empresa y buscar en la web si hay escandalos de explotación laboral y devolver un JSON estricto.
 
 ### DIRECTRICES DE EVALUACIÓN:
 1. **Puntaje (0-20):** - 18-20: Ingredientes puros, sin EDC, empresa ética.

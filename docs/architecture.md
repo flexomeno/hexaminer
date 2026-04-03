@@ -3,41 +3,54 @@
 ## Estructura de carpetas
 
 ```text
-/apps
-  /web                      # Frontend Next.js (App Router)
-    /app
-      /api/auth/[...nextauth]
-      /camera
-      /dashboard
-    /components
-      /analysis
-      /layout
-      /ui
-    /lib
-    /types
-/services
-  /api                      # Backend Serverless (AWS Lambda + API Gateway)
-    /src
-      /handlers
-      /lib
-      /types
-    serverless.yml
+apps/web                      # Frontend Next.js (App Router)
+  app/
+    api/auth/[...nextauth]
+    camera
+    dashboard
+  components/
+  lib/
+  types/
+
+services/api                  # Código de Lambdas (TypeScript)
+  src/handlers
+  src/lib                     # openai.ts (prompt), dynamo.ts, s3.ts, …
+  src/types
+  serverless.yml              # Despliegue alternativo con Serverless Framework
+
+terraform/                    # Infraestructura como código (recomendado en este repo)
+  *.tf                        # Ver terraform/README.md para lista de archivos
 ```
 
-## Infraestructura AWS (Serverless Framework)
+## Infraestructura AWS
 
-Archivo principal: `services/api/serverless.yml`
+Hay **dos formas** de desplegar lo mismo conceptualmente:
 
-- **API Gateway HTTP API** con CORS abierto para prototipado.
-- **Lambdas**:
-  - `analyzeProduct` (`POST /analyze-product`)
-  - `getUploadUrl` (`POST /upload-url`)
-  - `addShoppingListItem` (`POST /shopping-list/items`)
-  - `evaluateShoppingList` (`POST /shopping-list/evaluate`)
-  - `getUserDashboard` (`GET /dashboard`)
-- **DynamoDB**: una sola tabla (`PK`, `SK`) + GSI1 (`GSI1PK`, `GSI1SK`).
-- **S3 bucket** privado para imágenes (`BlockPublicAccess` + cifrado AES256).
-- **IAM mínimo**: la Lambda puede leer/escribir S3 del bucket y operar sobre la tabla.
+### A) Terraform (recomendado)
+
+Directorio `terraform/`: define API Gateway HTTP, Lambdas, DynamoDB, S3, IAM, CORS en S3 para subidas desde el navegador. Lista detallada de archivos en **`terraform/README.md`**.
+
+- **API Gateway HTTP API** con CORS abierto para el API.
+- **Lambdas** (mismas rutas que abajo).
+- **DynamoDB**: una tabla (`PK`, `SK`) + GSI1.
+- **S3**: bucket privado, cifrado, política TLS, **CORS** para `PUT` desde orígenes del front (p. ej. `localhost:3000`).
+- **IAM**: rol de Lambda con logs, DynamoDB y S3 del bucket.
+
+### B) Serverless Framework
+
+Archivo principal: `services/api/serverless.yml` — mismos recursos lógicos; **no** incluye la configuración CORS de S3 del repo Terraform (si usas solo Serverless, puede hacer falta configurar CORS del bucket manualmente para la subida desde el navegador).
+
+### Endpoints HTTP
+
+- `analyzeProduct` → `POST /analyze-product`
+- `getUploadUrl` → `POST /upload-url`
+- `addShoppingListItem` → `POST /shopping-list/items`
+- `evaluateShoppingList` → `POST /shopping-list/evaluate`
+- `getUserDashboard` → `GET /dashboard`
+
+## Prompt de OpenAI
+
+Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de usuario). Tras cambiarlo, hay que **volver a desplegar** las Lambdas (p. ej. `npm run build:terraform` + `terraform apply` en `terraform/`).
 
 ## DynamoDB Single Table Design
 
@@ -116,12 +129,18 @@ Archivo principal: `services/api/serverless.yml`
 
 ## Variables de entorno clave
 
-### Backend (`services/api`)
+### Backend (Lambda en ejecución)
+
+Inyectadas por Terraform/Serverless en la Lambda:
 
 - `TABLE_NAME`
 - `BUCKET_NAME`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (default: `gpt-4o`)
+
+### Despliegue Terraform (solo en tu máquina / CI)
+
+- `TF_VAR_openaikey` → variable Terraform `openaikey` → se mapea a `OPENAI_API_KEY` en las Lambdas
 
 ### Frontend (`apps/web`)
 
