@@ -25,7 +25,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             <ScoreRing score={avg} />
-            <p className="text-center text-sm text-slate-600">
+            <p className="text-center text-sm leading-relaxed text-slate-800">
               {dashboard?.shopping_list_summary.recommendation ??
                 "Aún no hay datos de canasta."}
             </p>
@@ -38,7 +38,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {(dashboard?.recent_scans ?? []).length === 0 ? (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-800">
                 No hay escaneos todavía. Ve a cámara para iniciar.
               </p>
             ) : (
@@ -51,7 +51,7 @@ export default async function DashboardPage() {
                     <p className="text-sm font-semibold text-slate-900">
                       {scan.productName}
                     </p>
-                    <p className="text-xs text-slate-500">{scan.scannedAt}</p>
+                    <p className="text-xs text-slate-600">{scan.scannedAt}</p>
                   </div>
                   <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                     {scan.score}/20

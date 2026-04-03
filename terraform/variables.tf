@@ -34,3 +34,9 @@ variable "default_tags" {
   description = "Tags por defecto en recursos compatibles"
   default     = {}
 }
+
+variable "s3_cors_allowed_origins" {
+  type        = list(string)
+  description = "Orígenes del navegador permitidos para PUT directo al bucket (dev local + dominio de producción)"
+  default     = ["http://localhost:3000", "http://127.0.0.1:3000"]
+}

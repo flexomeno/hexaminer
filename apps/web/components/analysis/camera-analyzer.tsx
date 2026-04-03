@@ -134,9 +134,9 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
 
         {analysis ? (
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-700">
               Resultado obtenido desde:{" "}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-slate-900">
                 {fromCache ? "DynamoDB cache" : "OpenAI (nuevo análisis)"}
               </span>
             </p>

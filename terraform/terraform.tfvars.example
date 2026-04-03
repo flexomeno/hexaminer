@@ -15,3 +15,6 @@ stage        = "dev"
 # default_tags = {
 #   Project = "hexaminer"
 # }
+
+# Orígenes para subida de fotos desde el navegador (CORS en S3). Añade tu dominio en producción:
+# s3_cors_allowed_origins = ["http://localhost:3000", "https://tu-app.vercel.app"]

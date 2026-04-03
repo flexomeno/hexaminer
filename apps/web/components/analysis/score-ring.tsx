@@ -52,9 +52,9 @@ export function ScoreRing({
           strokeDashoffset={dashOffset}
         />
       </svg>
-      <div className="absolute text-center">
-        <p className="text-2xl font-bold">{normalizedScore}</p>
-        <p className="text-xs text-zinc-500">/ 20</p>
+      <div className="absolute text-center text-slate-900">
+        <p className="text-2xl font-bold tabular-nums">{normalizedScore}</p>
+        <p className="text-xs font-medium text-slate-700">/ 20</p>
       </div>
     </div>
   );

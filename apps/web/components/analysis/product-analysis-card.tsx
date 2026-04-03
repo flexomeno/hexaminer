@@ -11,65 +11,65 @@ type ProductAnalysisCardProps = {
 
 export function ProductAnalysisCard({ product }: ProductAnalysisCardProps) {
   return (
-    <Card>
+    <Card className="text-slate-900">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>{product.name}</CardTitle>
-          <p className="text-sm text-zinc-600">
+          <CardTitle className="text-slate-950">{product.name}</CardTitle>
+          <p className="text-sm text-slate-700">
             {product.brand} · {product.category}
           </p>
         </div>
         <ScoreRing score={product.score} />
       </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm">
-          <p className="mb-1 font-semibold">Veredicto</p>
-          <p>{product.verdict}</p>
+      <CardContent className="space-y-5 text-slate-800">
+        <div className="rounded-lg border border-slate-200 bg-slate-100 p-3 text-sm">
+          <p className="mb-2 font-semibold text-slate-950">Veredicto</p>
+          <p className="leading-relaxed text-slate-900">{product.verdict}</p>
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 flex items-center gap-2 font-semibold">
-              <AlertTriangle className="h-4 w-4 text-red-500" />
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
               Alertas Endocrinas
             </p>
             {product.endocrine_alerts.length > 0 ? (
-              <ul className="list-disc pl-4 text-sm">
+              <ul className="list-disc space-y-1 pl-4 text-sm leading-snug text-slate-800">
                 {product.endocrine_alerts.map((alert) => (
                   <li key={alert}>{alert}</li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-zinc-600">No se detectaron EDC relevantes.</p>
+              <p className="text-sm text-slate-700">No se detectaron EDC relevantes.</p>
             )}
           </div>
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 flex items-center gap-2 font-semibold">
-              <Leaf className="h-4 w-4 text-emerald-600" />
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <Leaf className="h-4 w-4 shrink-0 text-emerald-700" />
               Salud
             </p>
-            <p className="text-sm">{product.health_alert}</p>
+            <p className="text-sm leading-relaxed text-slate-800">{product.health_alert}</p>
           </div>
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 flex items-center gap-2 font-semibold">
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-blue-700" />
               Ética Laboral
             </p>
-            <p className="text-sm">{product.labor_ethics}</p>
+            <p className="text-sm leading-relaxed text-slate-800">{product.labor_ethics}</p>
           </div>
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-semibold">Análisis químico</p>
+          <p className="mb-3 text-sm font-semibold text-slate-950">Análisis químico</p>
           <div className="space-y-2">
             {product.chemical_analysis.map((entry) => (
               <div
                 key={`${entry.ingrediente}-${entry.funcion}`}
-                className="rounded-md border px-3 py-2 text-sm"
+                className="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm"
               >
-                <p className="font-medium">{entry.ingrediente}</p>
-                <p className="text-zinc-600">{entry.funcion}</p>
-                <p className="mt-1 inline-block rounded bg-zinc-100 px-2 py-0.5 text-xs uppercase">
+                <p className="font-semibold text-slate-950">{entry.ingrediente}</p>
+                <p className="mt-0.5 text-slate-700">{entry.funcion}</p>
+                <p className="mt-2 inline-block rounded-md bg-slate-200 px-2 py-1 text-xs font-medium uppercase tracking-wide text-slate-900">
                   {entry.calificacion}
                 </p>
               </div>
