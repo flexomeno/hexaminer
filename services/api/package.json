@@ -5,6 +5,7 @@
   "description": "Serverless backend for product label analysis",
   "scripts": {
     "build": "serverless package",
+    "build:terraform": "node scripts/bundle-lambda-terraform.mjs",
     "deploy": "serverless deploy",
     "remove": "serverless remove",
     "typecheck": "tsc --noEmit"
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.156",
     "@types/node": "^24.7.2",
+    "esbuild": "^0.25.0",
     "serverless": "^4.21.1",
     "serverless-esbuild": "^1.55.1",
     "ts-node": "^10.9.2",

@@ -1,0 +1,17 @@
+# Copia a terraform.tfvars (no commitear) y ajusta valores.
+
+aws_region   = "us-east-1"
+project_name = "product-analysis-api"
+stage        = "dev"
+
+# Recomendado: no poner la clave aquí; usa en el shell:
+#   export TF_VAR_openaikey="sk-proj-..."
+# Si usas este archivo (gitignore), descomenta:
+# openaikey = "sk-..."
+
+# Opcional
+# openai_model = "gpt-4o"
+
+# default_tags = {
+#   Project = "hexaminer"
+# }

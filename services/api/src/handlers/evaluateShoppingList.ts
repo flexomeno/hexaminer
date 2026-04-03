@@ -1,17 +1,20 @@
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { jsonResponse } from "../lib/http";
+import { jsonResponse, parseJson } from "../lib/http";
 import { getUserIdentityFromEvent, getUserIdFromQuery } from "../lib/userIdentity";
 import { evaluateShoppingList, getShoppingListItems } from "../lib/dynamo";
 
+type EvaluateBody = { userId?: string };
+
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
-    const identity = getUserIdentityFromEvent(event);
-    const userId = getUserIdFromQuery(event) ?? identity.userId;
-    const items = await getShoppingListItems(userId);
+    const body = parseJson<EvaluateBody>(event.body);
+    const explicitUserId = getUserIdFromQuery(event) ?? body?.userId;
+    const user = getUserIdentityFromEvent(event, explicitUserId);
+    const items = await getShoppingListItems(user.userId);
     const evaluation = evaluateShoppingList(items);
 
     return jsonResponse(200, {
-      user_id: userId,
+      user_id: user.userId,
       shopping_items: items,
       evaluation,
     });

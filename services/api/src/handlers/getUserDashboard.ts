@@ -1,19 +1,17 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { jsonResponse } from "../lib/http";
-import { getUserIdentityFromEvent } from "../lib/userIdentity";
+import { getUserIdentityFromEvent, getUserIdFromQuery } from "../lib/userIdentity";
 import {
   ensureUserProfile,
   evaluateShoppingList,
   getShoppingListItems,
   getUserScans,
 } from "../lib/dynamo";
-import { resolveRequestedUserId } from "../lib/userIdentity";
 
 export async function handler(event: APIGatewayProxyEventV2) {
   try {
-    const identity = getUserIdentityFromEvent(event);
-    const userId = resolveRequestedUserId(event, identity.userId) ?? identity.userId;
-    const user = { ...identity, userId };
+    const queryUserId = getUserIdFromQuery(event);
+    const user = getUserIdentityFromEvent(event, queryUserId);
     await ensureUserProfile(user);
 
     const [scans, shoppingList] = await Promise.all([
@@ -24,9 +22,9 @@ export async function handler(event: APIGatewayProxyEventV2) {
 
     return jsonResponse(200, {
       user,
-      recentScans: scans,
-      shoppingList,
-      shoppingEvaluation: shoppingSummary,
+      recent_scans: scans,
+      shopping_list: shoppingList,
+      shopping_list_summary: shoppingSummary,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Dashboard error";

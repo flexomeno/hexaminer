@@ -60,6 +60,18 @@ export function getUserIdentityFromEvent(
   const providedUserId = normalizeProvidedUserId(explicitUserId);
 
   if (providedUserId) {
+    if (providedUserId.startsWith("email#")) {
+      const afterPrefix = providedUserId.slice("email#".length);
+      const emailFromId = normalizeEmail(
+        afterPrefix.includes("@") ? afterPrefix : undefined,
+      );
+      return {
+        userId: providedUserId,
+        email: emailFromId,
+        name,
+        image,
+      };
+    }
     const maybeEmail = normalizeEmail(
       providedUserId.includes("@") ? providedUserId : undefined,
     );
@@ -105,8 +117,8 @@ export function resolveRequestedUserId(
   bodyUserId?: string,
 ): string {
   return (
-    normalizeProvidedUserId(bodyUserId) ??
     getUserIdFromQuery(event) ??
+    normalizeProvidedUserId(bodyUserId) ??
     "anonymous"
   );
 }

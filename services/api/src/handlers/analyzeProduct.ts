@@ -19,16 +19,13 @@ type AnalyzeRequestBody = {
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const body = parseJson<AnalyzeRequestBody>(event.body);
   const imageKey = body?.imageKey;
-  const requestedUserId = body?.userId?.trim();
 
   if (!imageKey) {
     return jsonResponse(400, { error: "imageKey is required" });
   }
 
   try {
-    const user = requestedUserId
-      ? { userId: requestedUserId }
-      : getUserIdentityFromEvent(event);
+    const user = getUserIdentityFromEvent(event, body?.userId);
     await ensureUserProfile(user);
 
     const imageBytes = await getImageFromS3(imageKey);
