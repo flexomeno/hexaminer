@@ -120,6 +120,8 @@ Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de 
 
 ## Frontend UX (Next.js)
 
+- **Android:** carpeta `android/`: app nativa (Jetpack Compose) que consume el mismo HTTP API. Ver `android/README.md`.
+
 - `/camera`: captura/subida de foto, análisis, render del resultado.
 - `/dashboard`: historial + resumen de canasta.
 - Componente `ScoreRing` (estilo Shadcn custom):

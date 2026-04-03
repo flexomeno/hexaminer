@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hexaminer</string>
+    <!-- Web client ID de Google Cloud (OAuth 2.0). Vacío = sin botón "Entrar con Google". -->
+    <string name="default_web_client_id" translatable="false"></string>
+</resources>

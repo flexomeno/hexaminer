@@ -1,0 +1,104 @@
+package com.hexaminer.app.data
+
+import android.content.Context
+import android.net.Uri
+import com.hexaminer.app.BuildConfig
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import java.util.concurrent.TimeUnit
+
+class HexaminerRepository(context: Context) {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    private val baseUrl: String = BuildConfig.API_BASE_URL.trimEnd('/') + "/"
+
+    private val okHttp: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .apply {
+            if (BuildConfig.DEBUG) {
+                addInterceptor(
+                    HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC),
+                )
+            }
+        }
+        .build()
+
+    private val retrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(baseUrl)
+        .client(okHttp)
+        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .build()
+
+    val api: HexaminerApi = retrofit.create(HexaminerApi::class.java)
+
+    private val appContext = context.applicationContext
+
+    suspend fun uploadBytesToPresigned(uploadUrl: String, bytes: ByteArray, contentType: String) {
+        withContext(Dispatchers.IO) {
+            val body = bytes.toRequestBody(contentType.toMediaType())
+            val request = Request.Builder()
+                .url(uploadUrl)
+                .put(body)
+                .header("Content-Type", contentType)
+                .build()
+            okHttp.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    error("S3 upload failed: HTTP ${resp.code}")
+                }
+            }
+        }
+    }
+
+    fun readUriBytes(uri: Uri): Pair<ByteArray, String> {
+        val stream = appContext.contentResolver.openInputStream(uri)
+            ?: error("No se pudo leer la imagen")
+        stream.use { input ->
+            val bytes = input.readBytes()
+            val type = appContext.contentResolver.getType(uri) ?: "image/jpeg"
+            return bytes to type
+        }
+    }
+
+    suspend fun analyzeFromUri(uri: Uri, userId: String?): ProductDto = withContext(Dispatchers.IO) {
+        val (bytes, contentType) = readUriBytes(uri)
+        val safeName = "upload-${System.currentTimeMillis()}.jpg"
+        val up = api.uploadUrl(
+            UploadUrlRequest(
+                fileName = safeName,
+                contentType = if (contentType.startsWith("image/")) contentType else "image/jpeg",
+            ),
+        )
+        uploadBytesToPresigned(up.uploadUrl, bytes, up.contentType ?: contentType)
+        val analyzed = api.analyzeProduct(
+            AnalyzeRequest(imageKey = up.key, userId = userId),
+        )
+        try {
+            api.addShoppingItem(
+                AddShoppingItemRequest(uid = analyzed.product.uid, userId = userId),
+            )
+        } catch (_: Exception) {
+            // no bloquear si la lista falla
+        }
+        analyzed.product
+    }
+
+    suspend fun loadDashboard(userId: String?): DashboardResponse =
+        withContext(Dispatchers.IO) { api.dashboard(userId) }
+
+    suspend fun evaluateList(userId: String?): EvaluateResponse =
+        withContext(Dispatchers.IO) { api.evaluate(EvaluateRequest(userId = userId)) }
+}

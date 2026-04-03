@@ -6,6 +6,7 @@ Aplicación serverless para analizar productos (alimentos, cosméticos y aseo) m
 
 ```text
 apps/web           Frontend Next.js (App Router) + Tailwind + NextAuth
+android/           App Android nativa (Compose) — mismo HTTP API que la web
 services/api       Código TypeScript de Lambdas (handlers, OpenAI, DynamoDB, S3)
 terraform/         Infraestructura AWS (recomendado): IaC con Terraform
 docs/              Arquitectura, single-table DynamoDB, flujos
@@ -37,6 +38,10 @@ Tras editar `.env.local`, reinicia `npm run dev`. En Google Cloud Console, añad
 ```bash
 cd apps/web && npm install && npm run dev
 ```
+
+### App Android (mismas funciones que la web)
+
+Carpeta **`android/`**: app **Compose** que habla con el API AWS (presign, análisis, dashboard). Configura la URL del API en `local.properties` (`hexaminer.api.baseUrl`). Instrucciones: **[`android/README.md`](android/README.md)**. Añade el **origen HTTPS** de producción en **CORS del bucket S3** (`s3_cors_allowed_origins` en Terraform) cuando publiques el front.
 
 ---
 
@@ -113,3 +118,4 @@ Variables: `OPENAI_API_KEY` y las definidas en `serverless.yml`.
 | [`docs/architecture.md`](docs/architecture.md) | Single-table DynamoDB, flujo cache-first, endpoints, Terraform vs Serverless, seguridad |
 | [`terraform/README.md`](terraform/README.md) | Lista de `.tf`, variables, outputs, CORS, estado remoto |
 | [`terraform/terraform.tfvars.example`](terraform/terraform.tfvars.example) | Ejemplo de variables (no commitear secretos) |
+| [`android/README.md`](android/README.md) | App Android nativa (API URL, Google OAuth opcional) |
