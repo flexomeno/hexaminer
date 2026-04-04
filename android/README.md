@@ -24,7 +24,7 @@ En `app/src/main/res/values/strings.xml`, rellena `default_web_client_id` con el
 ## Funciones
 
 - Elegir imagen de galería o **tomar foto** (cámara + `FileProvider`).
-- Flujo: `POST /upload-url` → `PUT` al presign → `POST /analyze-product` → intento de `POST /shopping-list/items`.
+- Flujo: una o varias veces `POST /upload-url` + `PUT` → `POST /analyze-product` con `imageKeys` → intento de `POST /shopping-list/items`.
 - **Panel:** `GET /dashboard?userId=...` (escaneos recientes, lista, resumen de canasta).
 
 ## Red

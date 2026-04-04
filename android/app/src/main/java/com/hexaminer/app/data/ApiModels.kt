@@ -14,7 +14,11 @@ data class UploadUrlResponse(
 )
 
 @Serializable
-data class AnalyzeRequest(val imageKey: String, val userId: String? = null)
+data class AnalyzeRequest(
+    val imageKey: String? = null,
+    val imageKeys: List<String>? = null,
+    val userId: String? = null,
+)
 
 @Serializable
 data class AnalyzeResponse(

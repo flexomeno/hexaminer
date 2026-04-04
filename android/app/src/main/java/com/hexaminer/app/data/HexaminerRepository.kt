@@ -73,18 +73,23 @@ class HexaminerRepository(context: Context) {
         }
     }
 
-    suspend fun analyzeFromUri(uri: Uri, userId: String?): ProductDto = withContext(Dispatchers.IO) {
-        val (bytes, contentType) = readUriBytes(uri)
-        val safeName = "upload-${System.currentTimeMillis()}.jpg"
-        val up = api.uploadUrl(
-            UploadUrlRequest(
-                fileName = safeName,
-                contentType = if (contentType.startsWith("image/")) contentType else "image/jpeg",
-            ),
-        )
-        uploadBytesToPresigned(up.uploadUrl, bytes, up.contentType ?: contentType)
+    suspend fun analyzeFromUris(uris: List<Uri>, userId: String?): ProductDto = withContext(Dispatchers.IO) {
+        require(uris.isNotEmpty()) { "Se necesita al menos una imagen" }
+        val keys = ArrayList<String>(uris.size)
+        uris.forEachIndexed { index, uri ->
+            val (bytes, contentType) = readUriBytes(uri)
+            val safeName = "upload-${System.currentTimeMillis()}-$index.jpg"
+            val up = api.uploadUrl(
+                UploadUrlRequest(
+                    fileName = safeName,
+                    contentType = if (contentType.startsWith("image/")) contentType else "image/jpeg",
+                ),
+            )
+            uploadBytesToPresigned(up.uploadUrl, bytes, up.contentType ?: contentType)
+            keys.add(up.key)
+        }
         val analyzed = api.analyzeProduct(
-            AnalyzeRequest(imageKey = up.key, userId = userId),
+            AnalyzeRequest(imageKeys = keys, userId = userId),
         )
         try {
             api.addShoppingItem(
@@ -95,6 +100,9 @@ class HexaminerRepository(context: Context) {
         }
         analyzed.product
     }
+
+    suspend fun analyzeFromUri(uri: Uri, userId: String?): ProductDto =
+        analyzeFromUris(listOf(uri), userId)
 
     suspend fun loadDashboard(userId: String?): DashboardResponse =
         withContext(Dispatchers.IO) { api.dashboard(userId) }

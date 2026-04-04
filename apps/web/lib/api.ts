@@ -54,7 +54,7 @@ export async function uploadToPresignedUrl(
 }
 
 export async function analyzeProduct(
-  payload: { imageKey: string },
+  payload: { imageKey?: string; imageKeys?: string[] },
   auth?: OptionalAuth,
 ) {
   const response = await fetch(`${env.apiBaseUrl}/analyze-product`, {

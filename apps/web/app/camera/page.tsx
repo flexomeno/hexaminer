@@ -14,8 +14,8 @@ export default async function CameraPage() {
         <section className="space-y-4">
           <h1 className="text-2xl font-bold tracking-tight">Escanear producto</h1>
           <p className="text-sm text-slate-600">
-            Sube una foto de etiqueta para analizar ingredientes, riesgos endocrinos
-            y ética laboral con estrategia cache-first.
+            Sube una o varias fotos (nombre, ingredientes, tabla nutricional) del mismo
+            producto; el análisis las combina. Cache por identificador del producto.
           </p>
           <CameraAnalyzer userId={userId} />
         </section>

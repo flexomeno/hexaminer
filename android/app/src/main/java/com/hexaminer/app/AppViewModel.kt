@@ -48,11 +48,16 @@ class AppViewModel(
     }
 
     fun analyzeImage(uri: Uri, onDone: () -> Unit) {
+        analyzeImages(listOf(uri), onDone)
+    }
+
+    fun analyzeImages(uris: List<Uri>, onDone: () -> Unit) {
+        if (uris.isEmpty()) return
         viewModelScope.launch {
             _ui.update { it.copy(loading = true, error = null) }
             try {
                 val uid = userPreferences.currentUserId()
-                val product = repository.analyzeFromUri(uri, uid)
+                val product = repository.analyzeFromUris(uris, uid)
                 _ui.update { it.copy(loading = false, lastProduct = product) }
                 onDone()
             } catch (e: Exception) {

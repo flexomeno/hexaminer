@@ -90,11 +90,11 @@ Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de 
 
 ## Flujo cache-first (`analyzeProduct`)
 
-1. Frontend sube imagen a S3 usando URL prefirmada (`/upload-url`).
-2. Frontend llama `/analyze-product` con `imageKey`.
+1. Frontend sube una o varias imágenes a S3 (`/upload-url` por archivo).
+2. Frontend llama `/analyze-product` con `imageKey` (una) o `imageKeys` (varias, máx. 12).
 3. Lambda:
-   - descarga imagen de S3,
-   - extrae UID (barcode ZXing, fallback OCR-lite/hash + fallback por nombre de archivo),
+   - descarga todas las imágenes de S3,
+   - extrae UID (barcode en cualquier foto, fallback hash estable del conjunto de bytes),
    - busca en DynamoDB por `PRODUCT#{uid}`.
 4. Si existe:
    - retorna producto cacheado (`source = "cache"`),

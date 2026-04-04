@@ -8,9 +8,10 @@ TERRAFORM_DIR="$REPO_ROOT/terraform"
 
 usage() {
   cat <<'EOF'
-Uso: analyze-label.sh [opciones] <ruta/imagen.jpg|png|webp>
+Uso: analyze-label.sh [opciones] <imagen> [imagen2 ...]
 
-  Sube la foto al bucket S3 del proyecto y llama POST /analyze-product.
+  Sube una o varias fotos (frente, ingredientes, tabla nutricional…) a S3 y llama
+  POST /analyze-product con imageKey (1 foto) o imageKeys (varias, máx. 12 en API).
   La URL del API se toma de (en orden): -b, HEXAMINER_API_BASE_URL, terraform output.
 
 Opciones:
@@ -26,6 +27,7 @@ Entorno:
 
 Ejemplos:
   ./scripts/analyze-label.sh ~/Desktop/etiqueta.jpg
+  ./scripts/analyze-label.sh frente.jpg ingredientes.jpg tabla.jpg
   ./scripts/analyze-label.sh -u 'email#yo@gmail.com' -s foto.png
 EOF
 }
@@ -52,24 +54,6 @@ if [[ $# -lt 1 ]]; then
   exit 1
 fi
 
-IMG=$1
-if [[ ! -f "$IMG" ]]; then
-  echo "No existe el archivo: $IMG" >&2
-  exit 1
-fi
-
-ext="${IMG##*.}"
-ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-case "$ext_lower" in
-  jpg | jpeg) CT="image/jpeg" ;;
-  png)        CT="image/png" ;;
-  webp)       CT="image/webp" ;;
-  *)
-    echo "Extensión no soportada: .$ext — usa .jpg, .jpeg, .png o .webp" >&2
-    exit 1
-    ;;
-esac
-
 if [[ -z "$API_BASE" && -d "$TERRAFORM_DIR" ]]; then
   API_BASE=$(cd "$TERRAFORM_DIR" && terraform output -raw api_base_url 2>/dev/null) || API_BASE=""
 fi
@@ -80,52 +64,81 @@ if [[ -z "$API_BASE" ]]; then
 fi
 
 API_BASE="${API_BASE%/}"
-NAME=$(basename "$IMG")
-SAFE_NAME=$(echo "$NAME" | tr -cd '[:alnum:]._-')
-[[ -n "$SAFE_NAME" ]] || SAFE_NAME="upload.jpg"
 
 if [[ "$QUIET" -eq 0 ]]; then
   echo "API:    $API_BASE" >&2
-  echo "Imagen: $IMG ($CT)" >&2
+  echo "Imágenes: $* " >&2
   [[ -n "$USER_ID" ]] && echo "Usuario: $USER_ID" >&2
 fi
 
-# --- POST /upload-url ---
-UP_JSON=$(curl -sS -X POST "$API_BASE/upload-url" \
-  -H "Content-Type: application/json" \
-  -d "{\"fileName\":\"$SAFE_NAME\",\"contentType\":\"$CT\"}")
+declare -a ALL_KEYS=()
 
-if ! echo "$UP_JSON" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-  echo "Respuesta inválida de upload-url:" >&2
-  echo "$UP_JSON" >&2
-  exit 1
-fi
+for IMG in "$@"; do
+  if [[ ! -f "$IMG" ]]; then
+    echo "No existe el archivo: $IMG" >&2
+    exit 1
+  fi
 
-if ! echo "$UP_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get('uploadUrl') else 1)" 2>/dev/null; then
-  echo "Error en upload-url:" >&2
-  echo "$UP_JSON" | python3 -m json.tool 2>/dev/null || echo "$UP_JSON" >&2
-  exit 1
-fi
+  ext="${IMG##*.}"
+  ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+  case "$ext_lower" in
+    jpg | jpeg) CT="image/jpeg" ;;
+    png)        CT="image/png" ;;
+    webp)       CT="image/webp" ;;
+    *)
+      echo "Extensión no soportada: .$ext — usa .jpg, .jpeg, .png o .webp ($IMG)" >&2
+      exit 1
+      ;;
+  esac
 
-KEY=$(echo "$UP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
-UPLOAD_URL=$(echo "$UP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['uploadUrl'])")
+  NAME=$(basename "$IMG")
+  SAFE_NAME=$(echo "$NAME" | tr -cd '[:alnum:]._-')
+  [[ -n "$SAFE_NAME" ]] || SAFE_NAME="upload.jpg"
 
-# --- PUT S3 ---
-PUT_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT "$UPLOAD_URL" \
-  -H "Content-Type: $CT" \
-  --data-binary @"$IMG")
+  UP_JSON=$(curl -sS -X POST "$API_BASE/upload-url" \
+    -H "Content-Type: application/json" \
+    -d "{\"fileName\":\"$SAFE_NAME\",\"contentType\":\"$CT\"}")
 
-if [[ "$PUT_CODE" != "200" ]]; then
-  echo "Fallo al subir a S3 (HTTP $PUT_CODE)" >&2
-  exit 1
-fi
-[[ "$QUIET" -eq 0 ]] && echo "S3:     subida OK (key=$KEY)" >&2
+  if ! echo "$UP_JSON" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+    echo "Respuesta inválida de upload-url:" >&2
+    echo "$UP_JSON" >&2
+    exit 1
+  fi
 
-# --- POST /analyze-product (una sola petición) ---
-AN_BODY=$(python3 -c "import json,sys; k=sys.argv[1]; u=sys.argv[2]; d={'imageKey':k};
+  if ! echo "$UP_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get('uploadUrl') else 1)" 2>/dev/null; then
+    echo "Error en upload-url:" >&2
+    echo "$UP_JSON" | python3 -m json.tool 2>/dev/null || echo "$UP_JSON" >&2
+    exit 1
+  fi
+
+  KEY=$(echo "$UP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+  UPLOAD_URL=$(echo "$UP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['uploadUrl'])")
+
+  PUT_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT "$UPLOAD_URL" \
+    -H "Content-Type: $CT" \
+    --data-binary @"$IMG")
+
+  if [[ "$PUT_CODE" != "200" ]]; then
+    echo "Fallo al subir a S3 (HTTP $PUT_CODE) — $IMG" >&2
+    exit 1
+  fi
+  ALL_KEYS+=("$KEY")
+  [[ "$QUIET" -eq 0 ]] && echo "S3:     subida OK $IMG (key=$KEY)" >&2
+done
+
+# --- POST /analyze-product ---
+KEYS_JSON=$(printf '%s\n' "${ALL_KEYS[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+if [[ ${#ALL_KEYS[@]} -eq 1 ]]; then
+  AN_BODY=$(python3 -c "import json,sys; k=json.loads(sys.argv[1])[0]; u=sys.argv[2]; d={'imageKey':k};
 u=u.strip();
 if u: d['userId']=u
-print(json.dumps(d))" "$KEY" "${USER_ID:-}")
+print(json.dumps(d))" "$KEYS_JSON" "${USER_ID:-}")
+else
+  AN_BODY=$(python3 -c "import json,sys; keys=json.loads(sys.argv[1]); u=sys.argv[2]; d={'imageKeys':keys};
+u=u.strip();
+if u: d['userId']=u
+print(json.dumps(d))" "$KEYS_JSON" "${USER_ID:-}")
+fi
 
 AN_CODE=$(curl -sS -o /tmp/hexaminer-an.json -w "%{http_code}" -X POST "$API_BASE/analyze-product" \
   -H "Content-Type: application/json" \

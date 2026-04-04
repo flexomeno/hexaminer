@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
-import { Camera, UploadCloud, LoaderCircle, ScanSearch } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Camera, UploadCloud, LoaderCircle, ScanSearch, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProductAnalysisCard } from "@/components/analysis/product-analysis-card";
@@ -14,21 +14,43 @@ import {
 } from "@/lib/api";
 import type { ProductRecord } from "@/types/domain";
 
+const MAX_FILES = 12;
+
 type CameraAnalyzerProps = {
   userId?: string;
 };
 
 export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ProductRecord | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState<boolean>(false);
 
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [previewUrls]);
+
+  function replaceFiles(next: File[]) {
+    const capped = next.slice(0, MAX_FILES);
+    setFiles(capped);
+    previewUrls.forEach((u) => URL.revokeObjectURL(u));
+    setPreviewUrls(capped.map((f) => URL.createObjectURL(f)));
+  }
+
+  function removeAt(index: number) {
+    const u = previewUrls[index];
+    if (u) URL.revokeObjectURL(u);
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function onAnalyze() {
-    if (!file) {
-      setError("Selecciona o captura una foto de etiqueta antes de analizar.");
+    if (files.length === 0) {
+      setError("Añade al menos una foto (frente, ingredientes, tabla nutricional…).");
       return;
     }
 
@@ -37,13 +59,23 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
     setAnalysis(null);
 
     try {
-      const upload = await requestUploadUrl({
-        fileName: file.name,
-        contentType: file.type || "image/jpeg",
-      });
-      await uploadToPresignedUrl(upload.uploadUrl, file, file.type || "image/jpeg");
+      const keys: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!;
+        const upload = await requestUploadUrl({
+          fileName: file.name || `foto-${i}.jpg`,
+          contentType: file.type || "image/jpeg",
+        });
+        await uploadToPresignedUrl(
+          upload.uploadUrl,
+          file,
+          file.type || "image/jpeg",
+        );
+        keys.push(upload.key);
+      }
+
       const auth = userId?.trim() ? { userId: userId.trim() } : undefined;
-      const response = await analyzeProduct({ imageKey: upload.key }, auth);
+      const response = await analyzeProduct({ imageKeys: keys }, auth);
 
       setAnalysis(response.product);
       setFromCache(response.source === "cache");
@@ -68,49 +100,65 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
         <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 p-6 text-center hover:bg-slate-50">
           <UploadCloud className="mb-2 h-6 w-6 text-slate-500" />
           <span className="text-sm font-medium text-slate-700">
-            Subir/capturar imagen de etiqueta
+            Subir fotos del producto (varias)
           </span>
           <span className="text-xs text-slate-500">
-            JPG/PNG. El backend intentará barcode y fallback por OCR.
+            Frente, ingredientes, tabla nutricional… hasta {MAX_FILES} imágenes JPG/PNG/WebP.
           </span>
           <input
             className="sr-only"
             type="file"
             accept="image/*"
-            capture="environment"
+            multiple
             onChange={(event) => {
-              const nextFile = event.target.files?.[0] ?? null;
-              setFile(nextFile);
-              if (previewUrl) {
-                URL.revokeObjectURL(previewUrl);
-              }
-              setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+              const list = event.target.files ? Array.from(event.target.files) : [];
+              replaceFiles(list);
+              event.target.value = "";
             }}
           />
         </label>
 
-        {file ? (
+        {files.length > 0 ? (
           <div className="space-y-2">
-            {previewUrl ? (
-              <Image
-                src={previewUrl}
-                alt="Vista previa de etiqueta"
-                width={640}
-                height={240}
-                unoptimized
-                className="h-40 w-full rounded-md object-cover"
-              />
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {previewUrls.map((url, i) => (
+                <div key={url} className="relative h-24 w-24 overflow-hidden rounded-md border">
+                  <Image
+                    src={url}
+                    alt={`Vista previa ${i + 1}`}
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-0 top-0 rounded-bl bg-black/60 p-1 text-white"
+                    onClick={() => removeAt(i)}
+                    aria-label={`Quitar imagen ${i + 1}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
             <p className="text-xs text-slate-500">
-              Archivo seleccionado: <span className="font-medium">{file.name}</span>
+              {files.length} foto(s) lista(s). Puedes añadir más desde el recuadro de arriba.
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => replaceFiles([])}
+            >
+              Quitar todas
+            </Button>
           </div>
         ) : null}
 
         <Button
           className="w-full"
           onClick={onAnalyze}
-          disabled={isLoading || !file}
+          disabled={isLoading || files.length === 0}
           type="button"
         >
           {isLoading ? (

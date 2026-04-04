@@ -69,20 +69,42 @@ export async function extractUidFromImage(
   imageBuffer: Buffer,
   objectKey?: string,
 ): Promise<string> {
-  const barcode = await decodeBarcodeWithZxing(imageBuffer);
-  if (barcode && isLikelyBarcode(barcode)) {
-    return barcode;
+  return extractUidFromImages([imageBuffer], objectKey ? [objectKey] : []);
+}
+
+/** UID estable para el mismo conjunto de bytes (orden de fotos irrelevante). */
+export async function extractUidFromImages(
+  buffers: Buffer[],
+  keys: string[],
+): Promise<string> {
+  if (buffers.length === 0) {
+    throw new Error("extractUidFromImages requires at least one image");
   }
 
-  const ocrBarcode = await runLightweightOcr(imageBuffer);
-  if (ocrBarcode) {
-    return ocrBarcode;
+  for (const buf of buffers) {
+    const barcode = await decodeBarcodeWithZxing(buf);
+    if (barcode && isLikelyBarcode(barcode)) {
+      return barcode;
+    }
   }
 
-  const keyFallback = objectKey?.match(/\d{8,14}/)?.[0];
-  if (keyFallback) {
-    return keyFallback;
+  for (const buf of buffers) {
+    const ocrBarcode = await runLightweightOcr(buf);
+    if (ocrBarcode) {
+      return ocrBarcode;
+    }
   }
 
-  return `IMG#${Date.now()}`;
+  for (const key of keys) {
+    const keyFallback = key?.match(/\d{8,14}/)?.[0];
+    if (keyFallback) {
+      return keyFallback;
+    }
+  }
+
+  const digests = buffers
+    .map((b) => createHash("sha256").update(b).digest("hex"))
+    .sort();
+  const combined = createHash("sha256").update(digests.join("|")).digest("hex").slice(0, 32);
+  return `MULTI#${combined}`;
 }

@@ -10,7 +10,7 @@ function getClient(): OpenAI {
   return client;
 }
 
-const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (estilo INCI Beauty), nutricionista clínico y auditor de responsabilidad social corporativa. Tu objetivo es procesar una imagen de una etiqueta, se debe analizar la empresa y buscar en la web si hay escandalos de explotación laboral y devolver un JSON estricto.
+const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (estilo INCI Beauty), nutricionista clínico y auditor de responsabilidad social corporativa. Puedes recibir UNA o VARIAS fotos del mismo producto (frente/empaque, tabla nutricional, lista de ingredientes, sellos, etc.): integra toda la información visible en un solo análisis coherente. Analiza la empresa y busca en tu conocimiento si hay escándalos de explotación laboral; devuelve un JSON estricto.
 
 ### DIRECTRICES DE EVALUACIÓN:
 1. **Puntaje (0-20):** - 18-20: Ingredientes puros, sin EDC, empresa ética.
@@ -40,11 +40,40 @@ const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (e
   "recomendacion": "Una acción concreta para el usuario"
 }`;
 
-const USER_PROMPTS = [
-  "Analiza esta etiqueta y responde SOLO con JSON válido según el formato.",
-  "Repite el análisis. Devuelve únicamente un único objeto JSON (sin markdown, sin texto antes ni después) que cumpla el esquema del sistema.",
-  "Último intento: responde solo el JSON del producto, sin comillas tipográficas ni bloques de código.",
-];
+function userPromptsForImageCount(count: number): string[] {
+  const intro =
+    count > 1
+      ? `Tienes ${count} imágenes del mismo producto. Cruza nombre/marca, ingredientes y datos nutricionales si aparecen en distintas fotos. `
+      : "";
+  return [
+    `${intro}Analiza y responde SOLO con JSON válido según el formato.`,
+    `${intro}Repite el análisis. Devuelve únicamente un único objeto JSON (sin markdown, sin texto antes ni después) que cumpla el esquema del sistema.`,
+    `${intro}Último intento: responde solo el JSON del producto, sin comillas tipográficas ni bloques de código.`,
+  ];
+}
+
+function detectImageMime(buffer: Buffer): string {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    return "image/jpeg";
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return "image/jpeg";
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -130,11 +159,24 @@ function isRateLimitError(err: unknown): boolean {
   return /429|rate limit|too many requests/i.test(msg);
 }
 
-export async function analyzeProductImageWithOpenAI(
-  imageBytes: Buffer,
+export async function analyzeProductImagesWithOpenAI(
+  imageBuffers: Buffer[],
 ): Promise<ProductAiAnalysis> {
-  const imageDataUrl = `data:image/jpeg;base64,${imageBytes.toString("base64")}`;
-  const maxAttempts = USER_PROMPTS.length;
+  if (imageBuffers.length === 0) {
+    throw new Error("At least one image is required");
+  }
+  const imageParts = imageBuffers.map((buf) => {
+    const mime = detectImageMime(buf);
+    const imageDataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+    return {
+      type: "input_image" as const,
+      image_url: imageDataUrl,
+      detail: "high" as const,
+    };
+  });
+
+  const userPrompts = userPromptsForImageCount(imageBuffers.length);
+  const maxAttempts = userPrompts.length;
   let lastError: Error = new Error("OpenAI analysis failed");
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -151,13 +193,9 @@ export async function analyzeProductImageWithOpenAI(
             content: [
               {
                 type: "input_text",
-                text: USER_PROMPTS[attempt] ?? USER_PROMPTS[USER_PROMPTS.length - 1],
+                text: userPrompts[attempt] ?? userPrompts[userPrompts.length - 1],
               },
-              {
-                type: "input_image",
-                image_url: imageDataUrl,
-                detail: "high",
-              },
+              ...imageParts,
             ],
           },
         ],
@@ -187,4 +225,10 @@ export async function analyzeProductImageWithOpenAI(
   }
 
   throw lastError;
+}
+
+export async function analyzeProductImageWithOpenAI(
+  imageBytes: Buffer,
+): Promise<ProductAiAnalysis> {
+  return analyzeProductImagesWithOpenAI([imageBytes]);
 }

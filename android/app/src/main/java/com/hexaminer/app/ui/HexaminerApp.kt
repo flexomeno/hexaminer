@@ -1,7 +1,9 @@
 package com.hexaminer.app.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.compose.foundation.layout.padding
@@ -12,7 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -32,6 +36,8 @@ import com.hexaminer.app.ui.screens.HomeScreen
 import com.hexaminer.app.ui.screens.ProductDetailScreen
 import com.hexaminer.app.ui.theme.HexaminerTheme
 
+private const val MAX_IMAGES = 12
+
 @Composable
 fun HexaminerApp(
     repository: HexaminerRepository,
@@ -48,15 +54,19 @@ fun HexaminerApp(
     val webClientId = stringResource(R.string.default_web_client_id)
     val showGoogle = webClientId.isNotBlank()
 
+    var pendingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
     LaunchedEffect(ui.error) {
         val msg = ui.error ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)
         vm.clearError()
     }
 
-    val pickMedia = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
-        uri?.let {
-            vm.analyzeImage(it) { nav.navigate("product") }
+    val pickMultiple = rememberLauncherForActivityResult(
+        PickMultipleVisualMedia(MAX_IMAGES),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            pendingUris = uris.take(MAX_IMAGES)
         }
     }
 
@@ -85,13 +95,26 @@ fun HexaminerApp(
                         loading = ui.loading,
                         userLabel = ui.userIdLabel,
                         showGoogleSignIn = showGoogle,
+                        pendingUris = pendingUris,
+                        onPendingChange = { pendingUris = it },
                         onPickGallery = {
-                            pickMedia.launch(
+                            pickMultiple.launch(
                                 PickVisualMediaRequest(PickVisualMedia.ImageOnly),
                             )
                         },
                         onCaptureReady = { uri ->
-                            vm.analyzeImage(uri) { nav.navigate("product") }
+                            if (pendingUris.size < MAX_IMAGES) {
+                                pendingUris = pendingUris + uri
+                            }
+                        },
+                        onAnalyzePending = {
+                            val list = pendingUris
+                            if (list.isNotEmpty()) {
+                                vm.analyzeImages(list) {
+                                    pendingUris = emptyList()
+                                    nav.navigate("product")
+                                }
+                            }
                         },
                         onOpenDashboard = { nav.navigate("dashboard") },
                         onGoogleSignIn = {
