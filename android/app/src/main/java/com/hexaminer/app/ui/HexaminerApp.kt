@@ -7,9 +7,17 @@ import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVis
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,9 +27,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -35,6 +45,7 @@ import com.hexaminer.app.ui.screens.DashboardScreen
 import com.hexaminer.app.ui.screens.HomeScreen
 import com.hexaminer.app.ui.screens.ProductDetailScreen
 import com.hexaminer.app.ui.theme.HexaminerTheme
+import com.hexaminer.app.ui.theme.MintBrand
 
 private const val MAX_IMAGES = 12
 
@@ -53,6 +64,8 @@ fun HexaminerApp(
     val snackbar = remember { SnackbarHostState() }
     val webClientId = stringResource(R.string.default_web_client_id)
     val showGoogle = webClientId.isNotBlank()
+    val navBackStackEntry by nav.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
     var pendingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
@@ -89,7 +102,61 @@ fun HexaminerApp(
 
     HexaminerTheme {
         Scaffold(
+            containerColor = MintBrand.Background,
+            contentColor = MintBrand.Title,
             snackbarHost = { SnackbarHost(snackbar) },
+            bottomBar = {
+                if (currentRoute != "product") {
+                    NavigationBar(
+                        containerColor = MintBrand.NavBarBg,
+                        tonalElevation = 0.dp,
+                    ) {
+                        val itemColors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MintBrand.Accent,
+                            selectedTextColor = MintBrand.Accent,
+                            indicatorColor = MintBrand.InfoBoxBg,
+                            unselectedIconColor = MintBrand.Muted,
+                            unselectedTextColor = MintBrand.Muted,
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == "home",
+                            onClick = {
+                                nav.navigate("home") {
+                                    popUpTo("home") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                )
+                            },
+                            label = { Text("Evaluar") },
+                            colors = itemColors,
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == "dashboard",
+                            onClick = {
+                                nav.navigate("dashboard") {
+                                    popUpTo("home") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.History,
+                                    contentDescription = null,
+                                )
+                            },
+                            label = { Text("Historial") },
+                            colors = itemColors,
+                        )
+                    }
+                }
+            },
         ) { padding ->
             NavHost(
                 navController = nav,
@@ -118,11 +185,14 @@ fun HexaminerApp(
                             if (list.isNotEmpty()) {
                                 vm.analyzeImages(list) {
                                     pendingUris = emptyList()
-                                    nav.navigate("dashboard")
+                                    nav.navigate("dashboard") {
+                                        popUpTo("home") { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             }
                         },
-                        onOpenDashboard = { nav.navigate("dashboard") },
                         onGoogleSignIn = {
                             signInLauncher.launch(googleClient.signInIntent)
                         },
@@ -155,7 +225,7 @@ fun HexaminerApp(
                     DashboardScreen(
                         loading = ui.loading,
                         dashboard = ui.dashboard,
-                        onBack = { nav.popBackStack() },
+                        onBack = null,
                         onRefresh = { vm.refreshDashboard() },
                         onOpenProduct = { productUid ->
                             vm.openProductByUid(productUid) {

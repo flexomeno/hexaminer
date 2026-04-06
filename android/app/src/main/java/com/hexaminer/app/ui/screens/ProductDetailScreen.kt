@@ -1,6 +1,6 @@
 package com.hexaminer.app.ui.screens
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +38,7 @@ import com.hexaminer.app.data.ChemicalRowDto
 import com.hexaminer.app.data.ProductDto
 import com.hexaminer.app.ui.theme.CardShape
 import com.hexaminer.app.ui.theme.HexCircularScore
+import com.hexaminer.app.ui.theme.MintBrand
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,8 +46,9 @@ fun ProductDetailScreen(
     product: ProductDto,
     onBack: () -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
     Scaffold(
+        containerColor = MintBrand.Background,
+        contentColor = MintBrand.Title,
         topBar = {
             TopAppBar(
                 title = {
@@ -54,6 +56,7 @@ fun ProductDetailScreen(
                         product.name,
                         maxLines = 1,
                         style = MaterialTheme.typography.titleLarge,
+                        color = MintBrand.Title,
                     )
                 },
                 navigationIcon = {
@@ -61,13 +64,15 @@ fun ProductDetailScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = MintBrand.Accent,
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    containerColor = MintBrand.Background,
+                    titleContentColor = MintBrand.Title,
+                    navigationIconContentColor = MintBrand.Accent,
+                    actionIconContentColor = MintBrand.Accent,
                 ),
             )
         },
@@ -75,12 +80,13 @@ fun ProductDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MintBrand.Background)
                 .padding(inner),
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                ScoreHeader(product, dark)
+                ScoreHeader(product)
             }
             item {
                 SectionCard("Veredicto", product.verdict)
@@ -102,11 +108,15 @@ fun ProductDetailScreen(
                     Text(
                         "Alertas endocrinas",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MintBrand.Accent,
                     )
                 }
                 items(product.endocrineAlerts) { line ->
-                    Text("• $line", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "• $line",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MintBrand.Title,
+                    )
                 }
             }
             if (product.ingredients.isNotEmpty()) {
@@ -114,7 +124,7 @@ fun ProductDetailScreen(
                     Text(
                         "Ingredientes",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MintBrand.Accent,
                     )
                 }
                 item {
@@ -126,7 +136,7 @@ fun ProductDetailScreen(
                     Text(
                         "Análisis químico",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MintBrand.Accent,
                     )
                 }
                 item {
@@ -138,14 +148,14 @@ fun ProductDetailScreen(
 }
 
 @Composable
-private fun ScoreHeader(product: ProductDto, dark: Boolean) {
+private fun ScoreHeader(product: ProductDto) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = CardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            containerColor = MintBrand.ToggleInactiveBg,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
             Modifier
@@ -158,25 +168,24 @@ private fun ScoreHeader(product: ProductDto, dark: Boolean) {
                 Text(
                     product.brand,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MintBrand.Accent,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     product.category,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MintBrand.Muted,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "Puntaje global",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MintBrand.Muted,
                 )
             }
             HexCircularScore(
                 score = product.score,
                 max = 20,
-                isDark = dark,
                 size = 128.dp,
                 strokeWidth = 10.dp,
             )
@@ -199,7 +208,11 @@ private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
             (selectedKey == "riesgo" && r.calificacion.equals("risk", ignoreCase = true))
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        TabRow(selectedTabIndex = tabIndex) {
+        TabRow(
+            selectedTabIndex = tabIndex,
+            containerColor = MintBrand.InfoBoxBg,
+            contentColor = MintBrand.Accent,
+        ) {
             riskTabs.forEachIndexed { i, (_, label) ->
                 val count = rows.count { r ->
                     r.calificacion.equals(riskTabs[i].first, ignoreCase = true) ||
@@ -209,6 +222,8 @@ private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
                     selected = tabIndex == i,
                     onClick = { tabIndex = i },
                     text = { Text("$label ($count)") },
+                    selectedContentColor = MintBrand.Accent,
+                    unselectedContentColor = MintBrand.Muted,
                 )
             }
         }
@@ -216,7 +231,7 @@ private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
             Text(
                 "No hay ingredientes en esta categoría.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MintBrand.Muted,
             )
         } else {
             filtered.forEach { row ->
@@ -224,31 +239,35 @@ private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
                     modifier = Modifier.fillMaxWidth(),
                     shape = CardShape,
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                        containerColor = MintBrand.Surface,
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(row.ingrediente, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            row.ingrediente,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MintBrand.Title,
+                        )
                         row.descripcion?.takeIf { it.isNotBlank() }?.let { desc ->
-                            Text(desc, style = MaterialTheme.typography.bodySmall)
+                            Text(desc, style = MaterialTheme.typography.bodySmall, color = MintBrand.Title)
                         }
                         Text(
                             "Función: ${row.funcion}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MintBrand.Muted,
                         )
                         row.justificacion?.takeIf { it.isNotBlank() }?.let { jus ->
                             Text(
                                 "Justificación (${row.calificacion}): $jus",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = MintBrand.Title,
                             )
                         }
                         Text(
                             row.calificacion,
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            color = MintBrand.Accent,
                         )
                     }
                 }
@@ -262,7 +281,7 @@ private fun SectionCard(title: String, body: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = CardShape,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MintBrand.Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(
@@ -273,10 +292,14 @@ private fun SectionCard(title: String, body: String) {
                 Text(
                     title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MintBrand.Accent,
                 )
             }
-            Text(body, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MintBrand.Title,
+            )
         }
     }
 }

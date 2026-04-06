@@ -1,5 +1,6 @@
 package com.hexaminer.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,32 +36,38 @@ import com.hexaminer.app.data.DashboardResponse
 import com.hexaminer.app.data.ShoppingItemDto
 import com.hexaminer.app.data.UserScanDto
 import com.hexaminer.app.ui.theme.CardShape
+import com.hexaminer.app.ui.theme.MintBrand
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     loading: Boolean,
     dashboard: DashboardResponse?,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     onRefresh: () -> Unit,
     onOpenProduct: (productUid: String) -> Unit,
 ) {
     Scaffold(
+        containerColor = MintBrand.Background,
+        contentColor = MintBrand.Title,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Panel",
+                        "Historial",
                         style = MaterialTheme.typography.titleLarge,
+                        color = MintBrand.Title,
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Volver",
+                                tint = MintBrand.Accent,
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -68,13 +75,15 @@ fun DashboardScreen(
                         Icon(
                             Icons.Default.Refresh,
                             contentDescription = "Actualizar",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = MintBrand.Accent,
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    containerColor = MintBrand.Background,
+                    titleContentColor = MintBrand.Title,
+                    navigationIconContentColor = MintBrand.Accent,
+                    actionIconContentColor = MintBrand.Accent,
                 ),
             )
         },
@@ -82,6 +91,7 @@ fun DashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MintBrand.Background)
                 .padding(inner),
         ) {
             when {
@@ -90,7 +100,7 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator(color = MintBrand.Accent)
                     }
                     return@Column
                 }
@@ -103,7 +113,7 @@ fun DashboardScreen(
                         Text(
                             "Sin datos. Pulsa actualizar.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MintBrand.Muted,
                         )
                     }
                     return@Column
@@ -120,7 +130,7 @@ fun DashboardScreen(
                         Text(
                             u.name ?: u.email ?: u.userId,
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MintBrand.Accent,
                         )
                     }
                 }
@@ -130,7 +140,7 @@ fun DashboardScreen(
                         Text(
                             "Análisis en proceso",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MintBrand.Accent,
                         )
                     }
                     items(data.pendingJobs) { job ->
@@ -144,9 +154,9 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = CardShape,
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                containerColor = MintBrand.InfoBoxBg,
                             ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                         ) {
                             Column(
                                 Modifier.padding(18.dp),
@@ -155,19 +165,28 @@ fun DashboardScreen(
                                 Text(
                                     "Tu canasta",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = MintBrand.Accent,
                                 )
-                                Text("Productos: ${sum.listSize}", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "Productos: ${sum.listSize}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MintBrand.Title,
+                                )
                                 Text(
                                     "Puntaje medio: ${sum.averageScore}",
                                     style = MaterialTheme.typography.bodyMedium,
+                                    color = MintBrand.Title,
                                 )
                                 Text(
                                     "Grado: ${sum.basketGrade}",
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.tertiary,
+                                    color = MintBrand.AccentSoft,
                                 )
-                                Text(sum.recommendation, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    sum.recommendation,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MintBrand.Title,
+                                )
                             }
                         }
                     }
@@ -178,7 +197,7 @@ fun DashboardScreen(
                         Text(
                             "Lista de compras",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MintBrand.Accent,
                         )
                     }
                     items(data.shoppingList) { item ->
@@ -193,7 +212,7 @@ fun DashboardScreen(
                     Text(
                         "Escaneos recientes",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MintBrand.Accent,
                     )
                 }
                 if (data.recentScans.isEmpty()) {
@@ -204,7 +223,7 @@ fun DashboardScreen(
                                 "userId (incluida la web si usas el mismo identificador). Pulsa " +
                                 "«Actualizar» tras un escaneo.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MintBrand.Muted,
                         )
                     }
                 } else {
@@ -230,6 +249,7 @@ private fun ShoppingRow(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = CardShape,
+        colors = CardDefaults.cardColors(containerColor = MintBrand.Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
@@ -237,22 +257,26 @@ private fun ShoppingRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(item.productName, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    item.productName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MintBrand.Title,
+                )
                 Text(
                     "Puntaje: ${item.score} · Riesgos EDC: ${item.endocrineRiskCount}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MintBrand.Muted,
                 )
                 Text(
                     "Toca para ver detalle",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MintBrand.Accent,
                 )
             }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MintBrand.Muted,
             )
         }
     }
@@ -264,7 +288,7 @@ private fun PendingJobRow(job: AnalysisJobSummaryDto) {
         modifier = Modifier.fillMaxWidth(),
         shape = CardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+            containerColor = MintBrand.InfoBoxBg,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
@@ -276,11 +300,12 @@ private fun PendingJobRow(job: AnalysisJobSummaryDto) {
                     else -> job.status
                 },
                 style = MaterialTheme.typography.titleSmall,
+                color = MintBrand.Title,
             )
             Text(
                 job.createdAt,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MintBrand.Muted,
             )
         }
     }
@@ -296,6 +321,7 @@ private fun ScanRow(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = CardShape,
+        colors = CardDefaults.cardColors(containerColor = MintBrand.Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
@@ -303,22 +329,26 @@ private fun ScanRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(scan.productName, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    scan.productName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MintBrand.Title,
+                )
                 Text(
                     "Puntaje: ${scan.score}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MintBrand.Muted,
                 )
                 Text(
                     "Toca para ver detalle",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MintBrand.Accent,
                 )
             }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MintBrand.Muted,
             )
         }
     }
