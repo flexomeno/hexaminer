@@ -12,6 +12,14 @@ function getClient(): OpenAI {
 
 const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética, nutricionista clínico y auditor de responsabilidad social corporativa. Puedes recibir UNA o VARIAS fotos del mismo producto (frente/empaque, tabla nutricional, lista de ingredientes, sellos, etc.): integra toda la información visible en un solo análisis coherente. Analiza la empresa y busca en tu conocimiento y en fuentes de internet si hay escándalos de explotación laboral; devuelve un JSON estricto.
 
+### LISTA DE INGREDIENTES — EXHAUSTIVIDAD (PRIORIDAD ABSOLUTA; NO OPTIMICES POR TOKENS):
+- El array \`analisis_quimico\` debe incluir **todos y cada uno** de los ingredientes legibles en la etiqueta o lista de ingredientes de las imágenes. **No omitas** ingredientes por brevedad, “los más importantes”, una muestra representativa o ahorro de espacio.
+- **No** sustituyas la lista completa por un resumen ni agrupaciones tipo “y otros”; cada compuesto o grupo nominal de la etiqueta debe tener su propio objeto en el array (si la etiqueta lista “aroma” o “conservante” como tal, respétalo; si enumera sustancias por separado, enuméralas por separado).
+- Respeta el **orden** en que aparecen en la etiqueta cuando sea visible (orden INCI en cosméticos; orden decreciente en alimentos cuando la norma lo indique; si no estás seguro del criterio normativo, conserva el orden leído de arriba a abajo / izquierda a derecha).
+- Si hay **varias fotos**, combina la información hasta reconstruir la lista completa; si una foto continúa la lista de otra, **une** sin duplicar el mismo ingrediente consecutivo.
+- Si el texto es **ilegible**, borroso o cortado, incluye todos los que puedas leer y, solo al final del array o en el último ítem legible, puedes indicar brevemente que faltan ingredientes por calidad de imagen (sin inventar nombres).
+- Las respuestas largas están permitidas: la **completitud** de \`analisis_quimico\` prima sobre acortar texto. Los campos \`veredicto\` y \`recomendacion\` pueden seguir siendo concisos según el formato.
+
 ### DIRECTRICES DE EVALUACIÓN:
 1. **Puntaje (0-20):** - 18-20: Ingredientes puros, sin EDC, empresa ética.
    - 14-17: Buen producto, algunos aditivos menores o envase plástico.
@@ -45,10 +53,11 @@ function userPromptsForImageCount(count: number): string[] {
     count > 1
       ? `Tienes ${count} imágenes del mismo producto. Cruza nombre/marca, ingredientes y datos nutricionales si aparecen en distintas fotos. `
       : "";
+  const exhaust = `${intro}IMPORTANTE: en analisis_quimico incluye el 100% de los ingredientes legibles de la etiqueta, sin omitir ninguno.`;
   return [
-    `${intro}Analiza y responde SOLO con JSON válido según el formato.`,
-    `${intro}Repite el análisis. Devuelve únicamente un único objeto JSON (sin markdown, sin texto antes ni después) que cumpla el esquema del sistema.`,
-    `${intro}Último intento: responde solo el JSON del producto, sin comillas tipográficas ni bloques de código.`,
+    `${exhaust} Analiza y responde SOLO con JSON válido según el formato.`,
+    `${exhaust} Repite el análisis completo. Devuelve un único objeto JSON (sin markdown) sin truncar el array de ingredientes.`,
+    `${exhaust} Último intento: JSON completo; si la lista es larga, sigue hasta el último ingrediente visible.`,
   ];
 }
 
@@ -217,6 +226,7 @@ export async function analyzeProductImagesWithOpenAI(
     try {
       const completion = await getClient().responses.create({
         model: config.openAiModel,
+        max_output_tokens: config.openAiMaxOutputTokens,
         input: [
           {
             role: "system",

@@ -6,10 +6,15 @@ for (const key of requiredEnv) {
   }
 }
 
+const defaultMaxOut = 16_384;
+const parsedMaxOut = parseInt(process.env.OPENAI_MAX_OUTPUT_TOKENS ?? "", 10);
+
 export const config = {
   tableName: process.env.TABLE_NAME!,
   bucketName: process.env.BUCKET_NAME!,
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o",
+  /** Límite alto de salida para listas largas de ingredientes (evita JSON truncado). */
+  openAiMaxOutputTokens: Number.isFinite(parsedMaxOut) && parsedMaxOut > 0 ? parsedMaxOut : defaultMaxOut,
   analyzeJobsQueueUrl: process.env.ANALYZE_JOBS_QUEUE_URL?.trim() ?? "",
 };
 
