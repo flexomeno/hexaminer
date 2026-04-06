@@ -1,20 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { Camera, UploadCloud, LoaderCircle, ScanSearch, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProductAnalysisCard } from "@/components/analysis/product-analysis-card";
 import {
-  addItemToShoppingList,
-  analyzeProduct,
+  getAnalyzeJob,
   requestUploadUrl,
+  startAnalyzeJob,
   uploadToPresignedUrl,
 } from "@/lib/api";
 import type { ProductRecord } from "@/types/domain";
 
 const MAX_FILES = 12;
+const POLL_MS = 2500;
+const POLL_MAX_ATTEMPTS = 48;
 
 type CameraAnalyzerProps = {
   userId?: string;
@@ -23,16 +26,24 @@ type CameraAnalyzerProps = {
 export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ProductRecord | null>(null);
-  const [fromCache, setFromCache] = useState<boolean>(false);
+  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
+  const pollAbort = useRef(false);
 
   useEffect(() => {
     return () => {
       previewUrls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [previewUrls]);
+
+  useEffect(() => {
+    return () => {
+      pollAbort.current = true;
+    };
+  }, []);
 
   function replaceFiles(next: File[]) {
     const capped = next.slice(0, MAX_FILES);
@@ -48,6 +59,33 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   }
 
+  async function pollJob(jobId: string, auth?: { userId: string }) {
+    pollAbort.current = false;
+    setIsPolling(true);
+    try {
+      for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
+        if (pollAbort.current) break;
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        const res = await getAnalyzeJob(jobId, auth);
+        if (res.job.status === "COMPLETED" && res.product) {
+          setAnalysis(res.product);
+          setQueuedMessage(null);
+          return;
+        }
+        if (res.job.status === "FAILED") {
+          setError(res.job.errorMessage ?? "El análisis falló. Intenta de nuevo.");
+          setQueuedMessage(null);
+          return;
+        }
+      }
+      setQueuedMessage(
+        "El análisis sigue en proceso. Revisa el historial en unos momentos.",
+      );
+    } finally {
+      setIsPolling(false);
+    }
+  }
+
   async function onAnalyze() {
     if (files.length === 0) {
       setError("Añade al menos una foto (frente, ingredientes, tabla nutricional…).");
@@ -55,8 +93,9 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
     }
 
     setError(null);
-    setIsLoading(true);
     setAnalysis(null);
+    setQueuedMessage(null);
+    setIsUploading(true);
 
     try {
       const keys: string[] = [];
@@ -75,18 +114,19 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
       }
 
       const auth = userId?.trim() ? { userId: userId.trim() } : undefined;
-      const response = await analyzeProduct({ imageKeys: keys }, auth);
+      const started = await startAnalyzeJob({ imageKeys: keys }, auth);
 
-      setAnalysis(response.product);
-      setFromCache(response.source === "cache");
-      await addItemToShoppingList({ uid: response.product.uid }, auth);
+      setQueuedMessage(started.message);
+      setIsUploading(false);
+      void pollJob(started.jobId, auth);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Error inesperado.";
       setError(message);
-    } finally {
-      setIsLoading(false);
+      setIsUploading(false);
     }
   }
+
+  const busy = isUploading || isPolling;
 
   return (
     <Card>
@@ -110,6 +150,7 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
             type="file"
             accept="image/*"
             multiple
+            disabled={busy}
             onChange={(event) => {
               const list = event.target.files ? Array.from(event.target.files) : [];
               replaceFiles(list);
@@ -134,6 +175,7 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
                     type="button"
                     className="absolute right-0 top-0 rounded-bl bg-black/60 p-1 text-white"
                     onClick={() => removeAt(i)}
+                    disabled={busy}
                     aria-label={`Quitar imagen ${i + 1}`}
                   >
                     <X className="h-4 w-4" />
@@ -148,6 +190,7 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
               type="button"
               variant="outline"
               size="sm"
+              disabled={busy}
               onClick={() => replaceFiles([])}
             >
               Quitar todas
@@ -158,13 +201,18 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
         <Button
           className="w-full"
           onClick={onAnalyze}
-          disabled={isLoading || files.length === 0}
+          disabled={busy || files.length === 0}
           type="button"
         >
-          {isLoading ? (
+          {isUploading ? (
             <>
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              Analizando...
+              Subiendo…
+            </>
+          ) : isPolling ? (
+            <>
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              Analizando en segundo plano…
             </>
           ) : (
             <>
@@ -173,6 +221,20 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
             </>
           )}
         </Button>
+
+        {queuedMessage ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+            <p>{queuedMessage}</p>
+            <p className="mt-2">
+              <Link
+                href="/dashboard"
+                className="font-semibold text-emerald-800 underline underline-offset-2"
+              >
+                Ir al historial (dashboard)
+              </Link>
+            </p>
+          </div>
+        ) : null}
 
         {error ? (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -183,10 +245,7 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
         {analysis ? (
           <div className="space-y-3">
             <p className="text-xs text-slate-700">
-              Resultado obtenido desde:{" "}
-              <span className="font-semibold text-slate-900">
-                {fromCache ? "DynamoDB cache" : "OpenAI (nuevo análisis)"}
-              </span>
+              Resultado listo. También quedó guardado en tu historial.
             </p>
             <ProductAnalysisCard product={analysis} />
           </div>

@@ -1,4 +1,4 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { ConditionalCheckFailedException, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   GetCommand,
@@ -6,8 +6,13 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { createHash } from "node:crypto";
 import { config } from "./config";
 import type {
+  AnalysisJobRecord,
+  AnalysisJobStatus,
+  AnalysisJobSummary,
+  ChemicalAnalysisItem,
   ProductAiAnalysis,
   ProductRecord,
   ProductCategory,
@@ -345,4 +350,256 @@ export function evaluateShoppingList(items: ShoppingListItem[]): ShoppingListEva
     tooManyEndocrineRisk,
     recommendation,
   };
+}
+
+// --- Catálogo global de ingredientes (deduplicado por nombre normalizado) ---
+
+export function ingredientStorageKeyFromName(name: string): string {
+  const n = name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+  return createHash("sha256").update(n, "utf8").digest("hex").slice(0, 32);
+}
+
+function normalizeCalificacion(v: string): ChemicalAnalysisItem["calificacion"] {
+  const x = (v ?? "").toLowerCase();
+  if (x === "riesgo" || x === "risk") return "riesgo";
+  if (x === "regular") return "regular";
+  return "bueno";
+}
+
+export type IngredientCatalogRow = {
+  canonicalName: string;
+  descripcion: string;
+  funcion: string;
+  calificacion: ChemicalAnalysisItem["calificacion"];
+  justificacion?: string;
+};
+
+export async function getIngredientProfile(name: string): Promise<IngredientCatalogRow | null> {
+  const hash = ingredientStorageKeyFromName(name);
+  const result = await doc.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: `INGREDIENT#${hash}`, SK: "PROFILE" },
+    }),
+  );
+  const item = result.Item as
+    | {
+        canonical_name: string;
+        descripcion: string;
+        funcion: string;
+        calificacion: string;
+        justificacion?: string;
+      }
+    | undefined;
+  if (!item) return null;
+  return {
+    canonicalName: item.canonical_name,
+    descripcion: item.descripcion,
+    funcion: item.funcion,
+    calificacion: normalizeCalificacion(item.calificacion),
+    justificacion: (item.justificacion ?? "").trim() || undefined,
+  };
+}
+
+export async function createIngredientIfAbsent(params: {
+  normalizedFrom: string;
+  canonicalName: string;
+  descripcion: string;
+  funcion: string;
+  calificacion: ChemicalAnalysisItem["calificacion"];
+  justificacion: string;
+}): Promise<void> {
+  const hash = ingredientStorageKeyFromName(params.normalizedFrom);
+  const ts = nowIso();
+  try {
+    await doc.send(
+      new PutCommand({
+        TableName: config.tableName,
+        Item: {
+          PK: `INGREDIENT#${hash}`,
+          SK: "PROFILE",
+          entityType: "INGREDIENT",
+          canonical_name: params.canonicalName,
+          descripcion: params.descripcion,
+          funcion: params.funcion,
+          calificacion: params.calificacion,
+          justificacion: params.justificacion,
+          created_at: ts,
+          updated_at: ts,
+        },
+        ConditionExpression: "attribute_not_exists(PK)",
+      }),
+    );
+  } catch (e) {
+    if (e instanceof ConditionalCheckFailedException) {
+      return;
+    }
+    throw e;
+  }
+}
+
+// --- Trabajos de análisis asíncrono ---
+
+export async function createAnalysisJobRecord(
+  jobId: string,
+  userId: string,
+  imageKeys: string[],
+): Promise<void> {
+  const ts = nowIso();
+  await doc.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: `JOB#${jobId}`,
+        SK: "META",
+        entityType: "ANALYSIS_JOB",
+        job_id: jobId,
+        user_id: userId,
+        image_keys: imageKeys,
+        status: "PENDING",
+        created_at: ts,
+        updated_at: ts,
+      },
+    }),
+  );
+  await doc.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: userPk(userId),
+        SK: `JOB#${jobId}`,
+        entityType: "ANALYSIS_JOB_REF",
+        job_id: jobId,
+        status: "PENDING",
+        created_at: ts,
+        updated_at: ts,
+      },
+    }),
+  );
+}
+
+export async function updateAnalysisJobStatus(params: {
+  jobId: string;
+  userId: string;
+  status: AnalysisJobStatus;
+  productUid?: string;
+  errorMessage?: string;
+}): Promise<void> {
+  const ts = nowIso();
+  const sets = ["#st = :st", "updated_at = :u"];
+  const names: Record<string, string> = { "#st": "status" };
+  const values: Record<string, unknown> = {
+    ":st": params.status,
+    ":u": ts,
+  };
+  if (params.productUid !== undefined) {
+    sets.push("product_uid = :p");
+    values[":p"] = params.productUid;
+  }
+  if (params.errorMessage !== undefined) {
+    sets.push("error_message = :e");
+    values[":e"] = params.errorMessage;
+  }
+  const expr = `SET ${sets.join(", ")}`;
+  await doc.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: `JOB#${params.jobId}`, SK: "META" },
+      UpdateExpression: expr,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    }),
+  );
+  const refSets = ["#st = :st", "updated_at = :u"];
+  const refNames: Record<string, string> = { "#st": "status" };
+  const refValues: Record<string, unknown> = { ":st": params.status, ":u": ts };
+  if (params.productUid !== undefined) {
+    refSets.push("product_uid = :p");
+    refValues[":p"] = params.productUid;
+  }
+  if (params.errorMessage !== undefined) {
+    refSets.push("error_message = :e");
+    refValues[":e"] = params.errorMessage;
+  }
+  await doc.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: userPk(params.userId), SK: `JOB#${params.jobId}` },
+      UpdateExpression: `SET ${refSets.join(", ")}`,
+      ExpressionAttributeNames: refNames,
+      ExpressionAttributeValues: refValues,
+    }),
+  );
+}
+
+export async function getAnalysisJobMeta(
+  jobId: string,
+  expectedUserId?: string,
+): Promise<AnalysisJobRecord | null> {
+  const result = await doc.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: `JOB#${jobId}`, SK: "META" },
+    }),
+  );
+  const item = result.Item as
+    | {
+        job_id: string;
+        user_id: string;
+        image_keys: string[];
+        status: AnalysisJobStatus;
+        product_uid?: string;
+        error_message?: string;
+        created_at: string;
+        updated_at: string;
+      }
+    | undefined;
+  if (!item) return null;
+  if (expectedUserId && item.user_id !== expectedUserId) {
+    return null;
+  }
+  return {
+    jobId: item.job_id,
+    userId: item.user_id,
+    status: item.status,
+    imageKeys: item.image_keys,
+    productUid: item.product_uid,
+    errorMessage: item.error_message,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+export async function getUserAnalysisJobSummaries(userId: string): Promise<AnalysisJobSummary[]> {
+  const result = await doc.send(
+    new QueryCommand({
+      TableName: config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": userPk(userId),
+        ":prefix": "JOB#",
+      },
+      ScanIndexForward: false,
+      Limit: 20,
+    }),
+  );
+  const items = (result.Items ?? []) as Array<{
+    job_id: string;
+    status: AnalysisJobStatus;
+    product_uid?: string;
+    error_message?: string;
+    created_at: string;
+  }>;
+  return items.map((i) => ({
+    jobId: i.job_id,
+    status: i.status,
+    productUid: i.product_uid,
+    errorMessage: i.error_message,
+    createdAt: i.created_at,
+  }));
 }

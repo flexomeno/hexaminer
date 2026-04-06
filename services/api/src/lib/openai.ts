@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { config, requireOpenAiApiKey } from "./config";
-import type { ProductAiAnalysis } from "../types/domain";
+import type { ChemicalAnalysisItem, ProductAiAnalysis } from "../types/domain";
 
 let client: OpenAI | null = null;
 function getClient(): OpenAI {
@@ -10,7 +10,7 @@ function getClient(): OpenAI {
   return client;
 }
 
-const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (estilo INCI Beauty), nutricionista clínico y auditor de responsabilidad social corporativa. Puedes recibir UNA o VARIAS fotos del mismo producto (frente/empaque, tabla nutricional, lista de ingredientes, sellos, etc.): integra toda la información visible en un solo análisis coherente. Analiza la empresa y busca en tu conocimiento si hay escándalos de explotación laboral; devuelve un JSON estricto.
+const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética, nutricionista clínico y auditor de responsabilidad social corporativa. Puedes recibir UNA o VARIAS fotos del mismo producto (frente/empaque, tabla nutricional, lista de ingredientes, sellos, etc.): integra toda la información visible en un solo análisis coherente. Analiza la empresa y busca en tu conocimiento y en fuentes de internet si hay escándalos de explotación laboral; devuelve un JSON estricto.
 
 ### DIRECTRICES DE EVALUACIÓN:
 1. **Puntaje (0-20):** - 18-20: Ingredientes puros, sin EDC, empresa ética.
@@ -29,14 +29,14 @@ const SYSTEM_PROMPT = `Actúa como un analista experto en química cosmética (e
     "puntaje_global": 0-20
   },
   "analisis_quimico": [
-    {"ingrediente": "nombre", "funcion": "para qué sirve", "calificacion": "bueno/regular/riesgo"}
+    {"ingrediente": "nombre", "descripcion": "qué es el compuesto o aditivo (1 frase)", "funcion": "para qué sirve en el producto", "calificacion": "bueno/regular/riesgo", "justificacion": "1-2 frases: por qué es bueno, regular o riesgoso (EDC, ultraprocesado, alérgeno, dosis, alternativas más seguras, etc.)"}
   ],
   "alertas": {
     "endocrinas": ["lista de EDCs encontrados"],
-    "salud": "explicación breve de riesgos nutricionales o dermatológicos",
+    "salud": "explicación de riesgos nutricionales o dermatológicos en no mas de 40 palabras",
     "etica_laboral": "resumen de comportamiento corporativo de la marca"
   },
-  "veredicto": "Resumen ejecutivo de 2 frases con tono empático pero directo",
+  "veredicto": "Resumen ejecutivo en no mas de 40 palabras con tono empático pero directo",
   "recomendacion": "Una acción concreta para el usuario"
 }`;
 
@@ -146,11 +146,45 @@ function tryParseAnalysis(candidate: string): ProductAiAnalysis | null {
   return null;
 }
 
+function normalizeCalificacion(v: unknown): ChemicalAnalysisItem["calificacion"] {
+  const x = String(v ?? "").toLowerCase();
+  if (x === "riesgo" || x === "risk") return "riesgo";
+  if (x === "regular") return "regular";
+  return "bueno";
+}
+
+function normalizeChemicalRows(rows: unknown): ChemicalAnalysisItem[] {
+  if (!Array.isArray(rows)) return [];
+  const out: ChemicalAnalysisItem[] = [];
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const row = r as Record<string, unknown>;
+    const ingrediente = String(row.ingrediente ?? "").trim();
+    if (!ingrediente) continue;
+    const funcion = String(row.funcion ?? "").trim() || "—";
+    const descripcionRaw = String(row.descripcion ?? "").trim();
+    const descripcion = descripcionRaw || undefined;
+    const justRaw = String(
+      row.justificacion ?? row.motivo_calificacion ?? row.razon ?? "",
+    ).trim();
+    const justificacion = justRaw || undefined;
+    out.push({
+      ingrediente,
+      descripcion,
+      funcion,
+      calificacion: normalizeCalificacion(row.calificacion),
+      justificacion,
+    });
+  }
+  return out;
+}
+
 function parseAnalysisFromModelOutput(text: string): ProductAiAnalysis {
   const parsed = tryParseAnalysis(text);
   if (!parsed) {
     throw new Error("OpenAI response was not valid JSON");
   }
+  parsed.analisis_quimico = normalizeChemicalRows(parsed.analisis_quimico);
   return parsed;
 }
 

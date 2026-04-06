@@ -7,8 +7,28 @@ export interface ProductCoreInfo {
 
 export interface ChemicalAnalysisItem {
   ingrediente: string;
+  /** Descripción del ingrediente (catálogo / modelo). */
+  descripcion?: string;
   funcion: string;
   calificacion: "bueno" | "regular" | "riesgo";
+  /** Por qué tiene esa calificación. */
+  justificacion?: string;
+}
+
+export type AnalysisJobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+export interface AnalysisJobSummary {
+  jobId: string;
+  status: AnalysisJobStatus;
+  productUid?: string;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface StartAnalyzeJobResponse {
+  jobId: string;
+  status: string;
+  message: string;
 }
 
 export interface ProductAnalysisResponse {
@@ -47,6 +67,18 @@ export interface ProductAnalysisResponse {
 
 export type AnalyzeProductResponse = ProductAnalysisResponse;
 export type ProductRecord = ProductAnalysisResponse["product"];
+
+export interface AnalyzeJobPollResponse {
+  job: {
+    jobId: string;
+    status: AnalysisJobStatus;
+    productUid?: string;
+    errorMessage?: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  product: ProductRecord | null;
+}
 
 export interface UploadUrlResponse {
   key: string;
@@ -88,6 +120,8 @@ export interface DashboardResponse {
   recent_scans: UserScanRecord[];
   shopping_list: ShoppingListItem[];
   shopping_list_summary: ShoppingListEvaluation;
+  /** Análisis en cola o en proceso (revisa el historial cuando terminen). */
+  pending_jobs?: AnalysisJobSummary[];
 }
 
 export interface ShoppingListEvaluateResponse {

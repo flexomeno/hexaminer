@@ -5,6 +5,7 @@ import android.net.Uri
 import com.hexaminer.app.BuildConfig
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -73,7 +74,7 @@ class HexaminerRepository(context: Context) {
         }
     }
 
-    suspend fun analyzeFromUris(uris: List<Uri>, userId: String?): ProductDto = withContext(Dispatchers.IO) {
+    private suspend fun uploadImagesAndCollectKeys(uris: List<Uri>): List<String> = withContext(Dispatchers.IO) {
         require(uris.isNotEmpty()) { "Se necesita al menos una imagen" }
         val keys = ArrayList<String>(uris.size)
         uris.forEachIndexed { index, uri ->
@@ -88,6 +89,40 @@ class HexaminerRepository(context: Context) {
             uploadBytesToPresigned(up.uploadUrl, bytes, up.contentType ?: contentType)
             keys.add(up.key)
         }
+        keys
+    }
+
+    /**
+     * Sube imágenes, encola análisis asíncrono y devuelve [jobId].
+     * El backend añade el producto a la lista al terminar.
+     */
+    suspend fun uploadAndStartAnalysisJob(uris: List<Uri>, userId: String?): String =
+        withContext(Dispatchers.IO) {
+            val keys = uploadImagesAndCollectKeys(uris)
+            val started = api.startAnalyzeJob(AnalyzeRequest(imageKeys = keys, userId = userId))
+            started.jobId
+        }
+
+    suspend fun waitForAnalysisJob(jobId: String, userId: String?): ProductDto =
+        withContext(Dispatchers.IO) {
+            repeat(48) {
+                delay(2_500)
+                val res = api.getAnalyzeJob(jobId, userId)
+                when (res.job.status) {
+                    "COMPLETED" -> {
+                        val p = res.product ?: error("Análisis completado sin datos de producto")
+                        return@withContext p
+                    }
+                    "FAILED" -> error(res.job.errorMessage ?: "El análisis falló")
+                    else -> Unit
+                }
+            }
+            error("Tiempo de espera agotado. Revisa el panel en unos minutos.")
+        }
+
+    /** Flujo síncrono legacy (scripts / compat). La app usa [uploadAndStartAnalysisJob] + [waitForAnalysisJob]. */
+    suspend fun analyzeFromUris(uris: List<Uri>, userId: String?): ProductDto = withContext(Dispatchers.IO) {
+        val keys = uploadImagesAndCollectKeys(uris)
         val analyzed = api.analyzeProduct(
             AnalyzeRequest(imageKeys = keys, userId = userId),
         )
@@ -106,6 +141,11 @@ class HexaminerRepository(context: Context) {
 
     suspend fun loadDashboard(userId: String?): DashboardResponse =
         withContext(Dispatchers.IO) { api.dashboard(userId) }
+
+    suspend fun fetchProduct(productUid: String, userId: String?): ProductDto =
+        withContext(Dispatchers.IO) {
+            api.getProduct(uid = productUid, userId = userId).product
+        }
 
     suspend fun evaluateList(userId: String?): EvaluateResponse =
         withContext(Dispatchers.IO) { api.evaluate(EvaluateRequest(userId = userId)) }

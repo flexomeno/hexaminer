@@ -34,6 +34,37 @@ export default async function DashboardPage() {
 
         <Card className="md:col-span-2">
           <CardHeader>
+            <CardTitle>Análisis en proceso</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(dashboard?.pending_jobs ?? []).length === 0 ? (
+              <p className="text-sm text-slate-700">
+                No hay escaneos pendientes. Al analizar desde la cámara, el resultado
+                aparecerá aquí unos segundos y luego en el historial.
+              </p>
+            ) : (
+              dashboard?.pending_jobs?.map((job) => (
+                <div
+                  key={job.jobId}
+                  className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-amber-950">
+                      {job.status === "PENDING" ? "En cola" : "Procesando…"}
+                    </p>
+                    <p className="text-xs text-amber-900/80">{job.createdAt}</p>
+                  </div>
+                  <span className="text-xs font-medium text-amber-950">
+                    {job.status}
+                  </span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-3">
+          <CardHeader>
             <CardTitle>Historial reciente</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">

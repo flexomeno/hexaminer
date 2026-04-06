@@ -30,8 +30,42 @@ data class AnalyzeResponse(
 @Serializable
 data class ChemicalRowDto(
     val ingrediente: String,
+    val descripcion: String? = null,
     val funcion: String,
     val calificacion: String,
+    val justificacion: String? = null,
+)
+
+@Serializable
+data class StartAnalyzeJobResponse(
+    val jobId: String,
+    val status: String,
+    val message: String,
+)
+
+@Serializable
+data class JobMetaDto(
+    val jobId: String,
+    val status: String,
+    val productUid: String? = null,
+    val errorMessage: String? = null,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
+@Serializable
+data class AnalyzeJobPollResponse(
+    val job: JobMetaDto,
+    val product: ProductDto? = null,
+)
+
+@Serializable
+data class AnalysisJobSummaryDto(
+    val jobId: String,
+    val status: String,
+    val productUid: String? = null,
+    val errorMessage: String? = null,
+    val createdAt: String,
 )
 
 @Serializable
@@ -53,6 +87,9 @@ data class ProductDto(
     val recommendation: String,
     @SerialName("last_updated") val lastUpdated: String,
 )
+
+@Serializable
+data class GetProductResponse(val product: ProductDto)
 
 @Serializable
 data class UserDto(
@@ -96,6 +133,7 @@ data class DashboardResponse(
     @SerialName("recent_scans") val recentScans: List<UserScanDto> = emptyList(),
     @SerialName("shopping_list") val shoppingList: List<ShoppingItemDto> = emptyList(),
     @SerialName("shopping_list_summary") val shoppingListSummary: ShoppingEvaluationDto? = null,
+    @SerialName("pending_jobs") val pendingJobs: List<AnalysisJobSummaryDto> = emptyList(),
 )
 
 @Serializable

@@ -46,8 +46,8 @@ provider:
 functions:
   analyzeProduct:
     handler: src/handlers/analyzeProduct.handler
-    timeout: 30
-    memorySize: 1024
+    timeout: 120
+    memorySize: 2048
     events:
       - httpApi:
           path: /analyze-product
@@ -72,6 +72,13 @@ functions:
     events:
       - httpApi:
           path: /dashboard
+          method: get
+  getProduct:
+    handler: src/handlers/getProduct.handler
+    timeout: 10
+    events:
+      - httpApi:
+          path: /product
           method: get
   addShoppingListItem:
     handler: src/handlers/addShoppingListItem.handler

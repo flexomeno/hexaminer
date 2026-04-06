@@ -1,12 +1,18 @@
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { jsonResponse, parseJson } from "../lib/http";
-import { ensureUserProfile } from "../lib/dynamo";
-import { runAnalyzeProductPipeline } from "../lib/analyzePipeline";
+import { randomUUID } from "node:crypto";
+import { requireAnalyzeJobsQueueUrl } from "../lib/config";
+import {
+  createAnalysisJobRecord,
+  ensureUserProfile,
+} from "../lib/dynamo";
 import { getUserIdentityFromEvent } from "../lib/userIdentity";
+import { jsonResponse, parseJson } from "../lib/http";
 
 const MAX_IMAGES = 12;
+const sqs = new SQSClient({});
 
-type AnalyzeRequestBody = {
+type Body = {
   imageKey?: string;
   imageKeys?: string[];
   userId?: string;
@@ -22,7 +28,7 @@ function isAllowedUploadKey(key: string): boolean {
   );
 }
 
-function normalizeImageKeys(body: AnalyzeRequestBody): string[] | null {
+function normalizeImageKeys(body: Body): string[] | null {
   const fromArray =
     Array.isArray(body.imageKeys) && body.imageKeys.length > 0
       ? body.imageKeys.filter((k): k is string => typeof k === "string" && k.trim().length > 0)
@@ -37,7 +43,7 @@ function normalizeImageKeys(body: AnalyzeRequestBody): string[] | null {
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
-  const body = parseJson<AnalyzeRequestBody>(event.body) ?? {};
+  const body = parseJson<Body>(event.body) ?? {};
   const keys = normalizeImageKeys(body);
 
   if (!keys || keys.length === 0) {
@@ -59,20 +65,31 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     const user = getUserIdentityFromEvent(event, body?.userId);
     await ensureUserProfile(user);
+    const queueUrl = requireAnalyzeJobsQueueUrl();
+    const jobId = randomUUID();
 
-    const { source, uid, product } = await runAnalyzeProductPipeline({
-      imageKeys: keys,
-      userId: user.userId,
-    });
+    await createAnalysisJobRecord(jobId, user.userId, keys);
 
-    return jsonResponse(200, {
-      source,
-      uid,
-      product,
+    await sqs.send(
+      new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: JSON.stringify({
+          jobId,
+          userId: user.userId,
+          imageKeys: keys,
+        }),
+      }),
+    );
+
+    return jsonResponse(202, {
+      jobId,
+      status: "PENDING",
+      message:
+        "Análisis en cola. En unos segundos podrás ver el resultado en el historial (dashboard).",
     });
   } catch (error) {
     return jsonResponse(500, {
-      error: "Failed to analyze product",
+      error: "Failed to start analysis job",
       detail: error instanceof Error ? error.message : "Unknown error",
     });
   }

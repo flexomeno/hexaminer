@@ -13,6 +13,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.924.0",
     "@aws-sdk/client-s3": "^3.924.0",
+    "@aws-sdk/client-sqs": "^3.1024.0",
     "@aws-sdk/lib-dynamodb": "^3.924.0",
     "@aws-sdk/s3-request-presigner": "^3.924.0",
     "@zxing/library": "^0.21.3",

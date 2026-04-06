@@ -16,7 +16,7 @@ resource "aws_apigatewayv2_stage" "default" {
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
-  for_each = local.lambda_functions
+  for_each = local.lambda_http_functions
 
   api_id                 = aws_apigatewayv2_api.http.id
   integration_type       = "AWS_PROXY"
@@ -26,7 +26,7 @@ resource "aws_apigatewayv2_integration" "lambda" {
 }
 
 resource "aws_apigatewayv2_route" "lambda" {
-  for_each = local.lambda_functions
+  for_each = local.lambda_http_functions
 
   api_id    = aws_apigatewayv2_api.http.id
   route_key = each.value.route_key
@@ -34,7 +34,7 @@ resource "aws_apigatewayv2_route" "lambda" {
 }
 
 resource "aws_lambda_permission" "apigw" {
-  for_each = local.lambda_functions
+  for_each = local.lambda_http_functions
 
   statement_id  = "AllowAPIGateway-${each.key}"
   action        = "lambda:InvokeFunction"

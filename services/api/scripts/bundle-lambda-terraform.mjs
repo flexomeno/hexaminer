@@ -14,9 +14,13 @@ const outRoot = join(apiRoot, "..", "..", "terraform", ".build", "lambda");
 
 const handlers = [
   { name: "analyzeProduct", entry: "src/handlers/analyzeProduct.ts" },
+  { name: "startAnalyzeJob", entry: "src/handlers/startAnalyzeJob.ts" },
+  { name: "getAnalyzeJob", entry: "src/handlers/getAnalyzeJob.ts" },
+  { name: "processAnalysisJob", entry: "src/handlers/processAnalysisJob.ts" },
   { name: "getUploadUrl", entry: "src/handlers/getUploadUrl.ts" },
   { name: "evaluateShoppingList", entry: "src/handlers/evaluateShoppingList.ts" },
   { name: "getUserDashboard", entry: "src/handlers/getUserDashboard.ts" },
+  { name: "getProduct", entry: "src/handlers/getProduct.ts" },
   { name: "addShoppingListItem", entry: "src/handlers/addShoppingListItem.ts" },
 ];
 

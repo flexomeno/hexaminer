@@ -1,8 +1,10 @@
 import { env } from "./config";
 import type {
-  ProductAnalysisResponse,
+  AnalyzeJobPollResponse,
   DashboardResponse,
+  ProductAnalysisResponse,
   ShoppingListEvaluation,
+  StartAnalyzeJobResponse,
   UploadUrlResponse,
 } from "@/types/domain";
 
@@ -63,6 +65,48 @@ export async function analyzeProduct(
     body: JSON.stringify(withOptionalUserId(payload, auth)),
   });
   return safeJson<ProductAnalysisResponse>(response);
+}
+
+/** Encola análisis en segundo plano (202). El resultado aparece en historial / dashboard. */
+export async function startAnalyzeJob(
+  payload: { imageKey?: string; imageKeys?: string[] },
+  auth?: OptionalAuth,
+) {
+  const response = await fetch(`${env.apiBaseUrl}/analyze-product/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(withOptionalUserId(payload, auth)),
+  });
+  const text = await response.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`HTTP ${response.status}: invalid JSON`);
+  }
+  if (response.status === 202 && data && typeof data === "object" && "jobId" in data) {
+    return data as StartAnalyzeJobResponse;
+  }
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${text}`);
+  }
+  throw new Error("Unexpected response from analyze-product/start");
+}
+
+export async function getAnalyzeJob(jobId: string, auth?: OptionalAuth) {
+  const params = new URLSearchParams({ jobId });
+  if (auth?.userId) {
+    params.set("userId", auth.userId);
+  }
+  const response = await fetch(
+    `${env.apiBaseUrl}/analyze-product/job?${params.toString()}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    },
+  );
+  return safeJson<AnalyzeJobPollResponse>(response);
 }
 
 export async function addItemToShoppingList(

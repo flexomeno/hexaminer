@@ -9,8 +9,12 @@ export interface ProductCoreInfo {
 
 export interface ChemicalAnalysisItem {
   ingrediente: string;
+  /** Descripción del ingrediente (puede coincidir con función si el modelo no separa). */
+  descripcion?: string;
   funcion: string;
   calificacion: "bueno" | "regular" | "riesgo";
+  /** Por qué se asignó esta calificación (riesgo, regular o bueno). */
+  justificacion?: string;
 }
 
 export interface ProductAlerts {
@@ -70,11 +74,35 @@ export interface ShoppingListItem {
   addedAt: string;
 }
 
+export type AnalysisJobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+export interface AnalysisJobRecord {
+  jobId: string;
+  userId: string;
+  status: AnalysisJobStatus;
+  imageKeys: string[];
+  productUid?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnalysisJobSummary {
+  jobId: string;
+  status: AnalysisJobStatus;
+  productUid?: string;
+  errorMessage?: string;
+  createdAt: string;
+}
+
 export type DbEntityType =
   | "PRODUCT"
   | "USER_PROFILE"
   | "USER_SCAN"
-  | "SHOPPING_ITEM";
+  | "SHOPPING_ITEM"
+  | "INGREDIENT"
+  | "ANALYSIS_JOB"
+  | "ANALYSIS_JOB_REF";
 
 export interface BaseDbItem {
   PK: string;

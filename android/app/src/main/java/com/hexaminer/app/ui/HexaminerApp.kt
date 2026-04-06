@@ -62,6 +62,12 @@ fun HexaminerApp(
         vm.clearError()
     }
 
+    LaunchedEffect(ui.infoHint) {
+        val msg = ui.infoHint ?: return@LaunchedEffect
+        snackbar.showSnackbar(msg)
+        vm.clearInfoHint()
+    }
+
     val pickMultiple = rememberLauncherForActivityResult(
         PickMultipleVisualMedia(MAX_IMAGES),
     ) { uris ->
@@ -112,7 +118,7 @@ fun HexaminerApp(
                             if (list.isNotEmpty()) {
                                 vm.analyzeImages(list) {
                                     pendingUris = emptyList()
-                                    nav.navigate("product")
+                                    nav.navigate("dashboard")
                                 }
                             }
                         },
@@ -151,6 +157,11 @@ fun HexaminerApp(
                         dashboard = ui.dashboard,
                         onBack = { nav.popBackStack() },
                         onRefresh = { vm.refreshDashboard() },
+                        onOpenProduct = { productUid ->
+                            vm.openProductByUid(productUid) {
+                                nav.navigate("product")
+                            }
+                        },
                     )
                 }
             }

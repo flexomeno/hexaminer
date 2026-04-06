@@ -20,12 +20,15 @@ resource "aws_lambda_function" "handlers" {
   source_code_hash = data.archive_file.lambda[each.key].output_base64sha256
 
   environment {
-    variables = {
-      TABLE_NAME     = aws_dynamodb_table.products.name
-      BUCKET_NAME    = aws_s3_bucket.uploads.id
-      OPENAI_API_KEY = var.openaikey
-      OPENAI_MODEL   = var.openai_model
-    }
+    variables = merge(
+      {
+        TABLE_NAME     = aws_dynamodb_table.products.name
+        BUCKET_NAME    = aws_s3_bucket.uploads.id
+        OPENAI_API_KEY = var.openaikey
+        OPENAI_MODEL   = var.openai_model
+      },
+      each.value.extra_env,
+    )
   }
 
   depends_on = [

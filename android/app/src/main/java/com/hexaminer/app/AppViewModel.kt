@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 data class AppUiState(
     val loading: Boolean = false,
     val error: String? = null,
+    /** Mensaje informativo (p. ej. análisis en segundo plano). */
+    val infoHint: String? = null,
     val lastProduct: ProductDto? = null,
     val dashboard: DashboardResponse? = null,
     val userIdLabel: String? = null,
@@ -43,6 +45,10 @@ class AppViewModel(
         _ui.update { it.copy(error = null) }
     }
 
+    fun clearInfoHint() {
+        _ui.update { it.copy(infoHint = null) }
+    }
+
     fun clearLastProduct() {
         _ui.update { it.copy(lastProduct = null) }
     }
@@ -51,15 +57,23 @@ class AppViewModel(
         analyzeImages(listOf(uri), onDone)
     }
 
-    fun analyzeImages(uris: List<Uri>, onDone: () -> Unit) {
+    fun analyzeImages(uris: List<Uri>, onEnqueued: () -> Unit) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
-            _ui.update { it.copy(loading = true, error = null) }
+            _ui.update { it.copy(loading = true, error = null, infoHint = null) }
             try {
                 val uid = userPreferences.currentUserId()
-                val product = repository.analyzeFromUris(uris, uid)
-                _ui.update { it.copy(loading = false, lastProduct = product) }
-                onDone()
+                val jobId = repository.uploadAndStartAnalysisJob(uris, uid)
+                _ui.update {
+                    it.copy(
+                        loading = false,
+                        infoHint = "Análisis en segundo plano. En unos segundos verás el resultado en el panel.",
+                    )
+                }
+                onEnqueued()
+                val product = repository.waitForAnalysisJob(jobId, uid)
+                silentRefreshDashboard(uid)
+                _ui.update { it.copy(lastProduct = product) }
             } catch (e: Exception) {
                 _ui.update {
                     it.copy(
@@ -71,6 +85,15 @@ class AppViewModel(
         }
     }
 
+    private suspend fun silentRefreshDashboard(userId: String?) {
+        try {
+            val dash = repository.loadDashboard(userId)
+            _ui.update { it.copy(dashboard = dash) }
+        } catch (_: Exception) {
+            // no molestar si el panel no actualiza
+        }
+    }
+
     fun refreshDashboard() {
         viewModelScope.launch {
             _ui.update { it.copy(loading = true, error = null) }
@@ -78,6 +101,26 @@ class AppViewModel(
                 val uid = userPreferences.currentUserId()
                 val dash = repository.loadDashboard(uid)
                 _ui.update { it.copy(loading = false, dashboard = dash) }
+            } catch (e: Exception) {
+                _ui.update {
+                    it.copy(
+                        loading = false,
+                        error = e.message ?: e.toString(),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Carga el producto desde Dynamo (historial / lista) y navega a detalle. */
+    fun openProductByUid(productUid: String, onLoaded: () -> Unit) {
+        viewModelScope.launch {
+            _ui.update { it.copy(loading = true, error = null) }
+            try {
+                val uid = userPreferences.currentUserId()
+                val product = repository.fetchProduct(productUid, uid)
+                _ui.update { it.copy(loading = false, lastProduct = product) }
+                onLoaded()
             } catch (e: Exception) {
                 _ui.update {
                     it.copy(
