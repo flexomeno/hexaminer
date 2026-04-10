@@ -60,6 +60,12 @@ locals {
       memory    = 256
       extra_env = {}
     }
+    resetUserSession = {
+      route_key = "POST /shopping-list/reset"
+      timeout   = 30
+      memory    = 256
+      extra_env = {}
+    }
   }
 
   lambda_http_functions = {

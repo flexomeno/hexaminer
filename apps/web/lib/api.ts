@@ -140,6 +140,21 @@ export async function evaluateShoppingList(auth?: OptionalAuth) {
   }>(response);
 }
 
+/** POST /shopping-list/reset. Por defecto en API solo vacía la canasta; `recentScans: true` borra historial. */
+export async function resetUserSession(
+  payload: { shoppingList?: boolean; recentScans?: boolean } = {},
+  auth?: OptionalAuth,
+) {
+  const response = await fetch(`${env.apiBaseUrl}/shopping-list/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(withOptionalUserId(payload, auth)),
+  });
+  return safeJson<{
+    cleared: { shoppingItems: number; recentScans: number };
+  }>(response);
+}
+
 export async function getDashboard(auth?: OptionalAuth) {
   const query = auth?.userId
     ? `?userId=${encodeURIComponent(auth.userId)}`

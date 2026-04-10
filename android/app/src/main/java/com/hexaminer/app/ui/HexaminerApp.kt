@@ -6,10 +6,21 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -25,9 +36,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -41,13 +56,15 @@ import com.hexaminer.app.AppViewModelFactory
 import com.hexaminer.app.R
 import com.hexaminer.app.data.HexaminerRepository
 import com.hexaminer.app.data.UserPreferences
-import com.hexaminer.app.ui.screens.DashboardScreen
+import com.hexaminer.app.ui.screens.HistoryScreen
 import com.hexaminer.app.ui.screens.HomeScreen
 import com.hexaminer.app.ui.screens.ProductDetailScreen
+import com.hexaminer.app.ui.screens.ShoppingListScreen
 import com.hexaminer.app.ui.theme.HexaminerTheme
 import com.hexaminer.app.ui.theme.MintBrand
 
 private const val MAX_IMAGES = 12
+private const val STARTUP_LOADER_MS = 1600L
 
 @Composable
 fun HexaminerApp(
@@ -55,6 +72,18 @@ fun HexaminerApp(
     userPreferences: UserPreferences,
     googleClient: GoogleSignInClient,
 ) {
+    var showStartupLoader by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(STARTUP_LOADER_MS)
+        showStartupLoader = false
+    }
+    if (showStartupLoader) {
+        HexaminerTheme {
+            StartupLoaderScreen()
+        }
+        return
+    }
+
     val factory = remember(repository, userPreferences) {
         AppViewModelFactory(repository, userPreferences)
     }
@@ -137,9 +166,9 @@ fun HexaminerApp(
                             colors = itemColors,
                         )
                         NavigationBarItem(
-                            selected = currentRoute == "dashboard",
+                            selected = currentRoute == "historial",
                             onClick = {
-                                nav.navigate("dashboard") {
+                                nav.navigate("historial") {
                                     popUpTo("home") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
@@ -152,6 +181,24 @@ fun HexaminerApp(
                                 )
                             },
                             label = { Text("Historial") },
+                            colors = itemColors,
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == "listaCompras",
+                            onClick = {
+                                nav.navigate("listaCompras") {
+                                    popUpTo("home") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.ShoppingCart,
+                                    contentDescription = null,
+                                )
+                            },
+                            label = { Text("Lista") },
                             colors = itemColors,
                         )
                     }
@@ -185,7 +232,7 @@ fun HexaminerApp(
                             if (list.isNotEmpty()) {
                                 vm.analyzeImages(list) {
                                     pendingUris = emptyList()
-                                    nav.navigate("dashboard") {
+                                    nav.navigate("historial") {
                                         popUpTo("home") { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
@@ -218,11 +265,11 @@ fun HexaminerApp(
                         }
                     }
                 }
-                composable("dashboard") {
+                composable("historial") {
                     LaunchedEffect(Unit) {
                         vm.refreshDashboard()
                     }
-                    DashboardScreen(
+                    HistoryScreen(
                         loading = ui.loading,
                         dashboard = ui.dashboard,
                         onBack = null,
@@ -234,7 +281,57 @@ fun HexaminerApp(
                         },
                     )
                 }
+                composable("listaCompras") {
+                    LaunchedEffect(Unit) {
+                        vm.refreshDashboard()
+                    }
+                    ShoppingListScreen(
+                        loading = ui.loading,
+                        dashboard = ui.dashboard,
+                        onBack = null,
+                        onRefresh = { vm.refreshDashboard() },
+                        onClearShoppingList = { vm.clearShoppingListOnly() },
+                        onOpenProduct = { productUid ->
+                            vm.openProductByUid(productUid) {
+                                nav.navigate("product")
+                            }
+                        },
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun StartupLoaderScreen() {
+    val context = LocalContext.current
+    val pulse = rememberInfiniteTransition(label = "logoPulse")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 950, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "alphaAnim",
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                android.widget.ImageView(ctx).apply {
+                    setImageDrawable(ctx.packageManager.getApplicationIcon(ctx.packageName))
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                }
+            },
+            modifier = Modifier
+                .size(128.dp)
+                .alpha(alpha),
+        )
     }
 }

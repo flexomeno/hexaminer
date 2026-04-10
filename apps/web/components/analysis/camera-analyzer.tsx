@@ -227,10 +227,10 @@ export function CameraAnalyzer({ userId }: CameraAnalyzerProps) {
             <p>{queuedMessage}</p>
             <p className="mt-2">
               <Link
-                href="/dashboard"
+                href="/dashboard/historial"
                 className="font-semibold text-emerald-800 underline underline-offset-2"
               >
-                Ir al historial (dashboard)
+                Ir al historial
               </Link>
             </p>
           </div>

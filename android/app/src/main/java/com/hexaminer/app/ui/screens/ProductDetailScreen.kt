@@ -1,6 +1,8 @@
 package com.hexaminer.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,8 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -33,6 +35,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.hexaminer.app.data.ChemicalRowDto
 import com.hexaminer.app.data.ProductDto
@@ -194,36 +199,47 @@ private fun ScoreHeader(product: ProductDto) {
 }
 
 private val riskTabs = listOf(
-    "riesgo" to "Riesgoso",
-    "regular" to "Regular",
-    "bueno" to "Bueno",
+    Triple("riesgo", "Riesgoso", 0),
+    Triple("regular", "Regular", 1),
+    Triple("bueno", "Bueno", 2),
 )
 
+private fun rowMatchesRiskKey(row: ChemicalRowDto, key: String): Boolean {
+    return row.calificacion.equals(key, ignoreCase = true) ||
+        (key == "riesgo" && row.calificacion.equals("risk", ignoreCase = true))
+}
+
+private fun calificacionColors(cal: String): Pair<Color, Color> {
+    val c = cal.lowercase()
+    return when {
+        c == "riesgo" || c == "risk" -> Color(0xFFFEE2E2) to Color(0xFFB91C1C)
+        c == "regular" -> Color(0xFFFFEDD5) to Color(0xFFEA580C)
+        c == "bueno" -> Color(0xFFD1FAE5) to Color(0xFF047857)
+        else -> MintBrand.ToggleInactiveBg to MintBrand.Accent
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
     var tabIndex by rememberSaveable { mutableIntStateOf(0) }
     val selectedKey = riskTabs[tabIndex].first
-    val filtered = rows.filter { r ->
-        r.calificacion.equals(selectedKey, ignoreCase = true) ||
-            (selectedKey == "riesgo" && r.calificacion.equals("risk", ignoreCase = true))
-    }
+    val filtered = rows.filter { rowMatchesRiskKey(it, selectedKey) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        TabRow(
-            selectedTabIndex = tabIndex,
-            containerColor = MintBrand.InfoBoxBg,
-            contentColor = MintBrand.Accent,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            riskTabs.forEachIndexed { i, (_, label) ->
-                val count = rows.count { r ->
-                    r.calificacion.equals(riskTabs[i].first, ignoreCase = true) ||
-                        (riskTabs[i].first == "riesgo" && r.calificacion.equals("risk", ignoreCase = true))
-                }
-                Tab(
+            riskTabs.forEachIndexed { i, (key, label, tierIndex) ->
+                val count = rows.count { rowMatchesRiskKey(it, key) }
+                RiskTierFilterChip(
+                    label = label,
+                    count = count,
                     selected = tabIndex == i,
+                    tierIndex = tierIndex,
                     onClick = { tabIndex = i },
-                    text = { Text("$label ($count)") },
-                    selectedContentColor = MintBrand.Accent,
-                    unselectedContentColor = MintBrand.Muted,
                 )
             }
         }
@@ -235,6 +251,7 @@ private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
             )
         } else {
             filtered.forEach { row ->
+                val (calBg, calFg) = calificacionColors(row.calificacion)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = CardShape,
@@ -264,15 +281,56 @@ private fun ChemicalAnalysisTabs(rows: List<ChemicalRowDto>) {
                                 color = MintBrand.Title,
                             )
                         }
-                        Text(
-                            row.calificacion,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MintBrand.Accent,
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = calBg,
+                            border = BorderStroke(1.dp, calFg.copy(alpha = 0.25f)),
+                        ) {
+                            Text(
+                                row.calificacion.uppercase(),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = calFg,
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RiskTierFilterChip(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    tierIndex: Int,
+    onClick: () -> Unit,
+) {
+    val (selBg, selFg) = when (tierIndex) {
+        0 -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
+        1 -> Color(0xFFFFEDD5) to Color(0xFF9A3412)
+        else -> Color(0xFFD1FAE5) to Color(0xFF065F46)
+    }
+    val bg = if (selected) selBg else MintBrand.ToggleInactiveBg
+    val fg = if (selected) selFg else MintBrand.Muted
+    val border = if (selected) selFg.copy(alpha = 0.35f) else MintBrand.InfoBoxBorder
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        border = BorderStroke(1.dp, border),
+    ) {
+        Text(
+            "$label ($count)",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = fg,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 

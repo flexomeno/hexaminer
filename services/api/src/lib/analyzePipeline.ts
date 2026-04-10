@@ -20,6 +20,7 @@ export async function runAnalyzeProductPipeline(params: {
       productUid: cached.uid,
       productName: cached.name,
       score: cached.score,
+      category: cached.category,
     });
     return { source: "cache", uid, product: cached };
   }
@@ -37,6 +38,7 @@ export async function runAnalyzeProductPipeline(params: {
     productUid: saved.uid,
     productName: saved.name,
     score: saved.score,
+    category: saved.category,
   });
 
   return { source: "openai", uid, product: saved };

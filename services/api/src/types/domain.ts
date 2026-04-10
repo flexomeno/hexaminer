@@ -64,6 +64,8 @@ export interface UserScanRecord {
   productName: string;
   score: number;
   scannedAt: string;
+  /** Clasificación del producto al escanear (escaneos antiguos: Desconocido). */
+  category: ProductCategory;
 }
 
 export interface ShoppingListItem {
@@ -136,6 +138,7 @@ export interface UserScanDbItem extends BaseDbItem {
   product_name: string;
   score: number;
   scanned_at: string;
+  product_category?: ProductCategory;
 }
 
 export interface ShoppingListItemDb extends BaseDbItem {

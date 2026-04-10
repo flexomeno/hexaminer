@@ -22,6 +22,20 @@ function filterByTab(rows: ChemicalAnalysisItem[], tab: RiskTab): ChemicalAnalys
   return rows.filter((r) => r.calificacion === tab);
 }
 
+function calificacionBadgeClass(calificacion: string): string {
+  const c = calificacion.toLowerCase();
+  if (c === "riesgo" || c === "risk") {
+    return "border border-red-200 bg-red-100 text-red-900";
+  }
+  if (c === "regular") {
+    return "border border-orange-200 bg-orange-100 text-orange-950";
+  }
+  if (c === "bueno") {
+    return "border border-emerald-200 bg-emerald-100 text-emerald-950";
+  }
+  return "border border-slate-200 bg-slate-200 text-slate-900";
+}
+
 export function ProductAnalysisCard({ product }: ProductAnalysisCardProps) {
   const [tab, setTab] = useState<RiskTab>("riesgo");
 
@@ -106,7 +120,7 @@ export function ProductAnalysisCard({ product }: ProductAnalysisCardProps) {
                     ? key === "riesgo"
                       ? "bg-red-100 text-red-900"
                       : key === "regular"
-                        ? "bg-amber-100 text-amber-950"
+                        ? "bg-orange-100 text-orange-950"
                         : "bg-emerald-100 text-emerald-950"
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
@@ -143,7 +157,9 @@ export function ProductAnalysisCard({ product }: ProductAnalysisCardProps) {
                       <span className="text-sm leading-relaxed">{entry.justificacion}</span>
                     </p>
                   ) : null}
-                  <p className="mt-2 inline-block rounded-md bg-slate-200 px-2 py-1 text-xs font-medium uppercase tracking-wide text-slate-900">
+                  <p
+                    className={`mt-2 inline-block rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wide ${calificacionBadgeClass(entry.calificacion)}`}
+                  >
                     {entry.calificacion}
                   </p>
                 </div>

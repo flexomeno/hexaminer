@@ -149,4 +149,19 @@ class HexaminerRepository(context: Context) {
 
     suspend fun evaluateList(userId: String?): EvaluateResponse =
         withContext(Dispatchers.IO) { api.evaluate(EvaluateRequest(userId = userId)) }
+
+    suspend fun resetSession(
+        userId: String?,
+        shoppingList: Boolean = true,
+        recentScans: Boolean = false,
+    ): ResetSessionResponse =
+        withContext(Dispatchers.IO) {
+            api.resetSession(
+                ResetSessionRequest(
+                    userId = userId,
+                    shoppingList = shoppingList,
+                    recentScans = recentScans,
+                ),
+            )
+        }
 }

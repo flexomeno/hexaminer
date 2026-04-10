@@ -32,6 +32,8 @@ resource "aws_iam_role_policy" "lambda_data" {
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
           "dynamodb:Query",
+          "dynamodb:DeleteItem",
+          "dynamodb:BatchWriteItem",
         ]
         Resource = [
           aws_dynamodb_table.products.arn,

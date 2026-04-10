@@ -22,7 +22,10 @@ export function TopNav() {
         <nav className="flex items-center gap-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active =
+              item.href === "/dashboard"
+                ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/")
+                : pathname === item.href;
             return (
               <Link
                 key={item.href}

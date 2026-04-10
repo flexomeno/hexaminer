@@ -22,6 +22,7 @@ const handlers = [
   { name: "getUserDashboard", entry: "src/handlers/getUserDashboard.ts" },
   { name: "getProduct", entry: "src/handlers/getProduct.ts" },
   { name: "addShoppingListItem", entry: "src/handlers/addShoppingListItem.ts" },
+  { name: "resetUserSession", entry: "src/handlers/resetUserSession.ts" },
 ];
 
 for (const h of handlers) {

@@ -105,6 +105,7 @@ data class UserScanDto(
     val productName: String,
     val score: Int,
     val scannedAt: String,
+    val category: String? = null,
 )
 
 @Serializable
@@ -150,4 +151,23 @@ data class EvaluateResponse(
     @SerialName("user_id") val userId: String,
     @SerialName("shopping_items") val shoppingItems: List<ShoppingItemDto> = emptyList(),
     val evaluation: ShoppingEvaluationDto,
+)
+
+@Serializable
+data class ResetSessionRequest(
+    val userId: String? = null,
+    val shoppingList: Boolean = true,
+    /** Solo true si se pide explícitamente; la app solo vacía la canasta. */
+    val recentScans: Boolean = false,
+)
+
+@Serializable
+data class ResetClearedDto(
+    val shoppingItems: Int,
+    val recentScans: Int,
+)
+
+@Serializable
+data class ResetSessionResponse(
+    val cleared: ResetClearedDto,
 )

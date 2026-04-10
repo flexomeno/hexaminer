@@ -1,5 +1,6 @@
 import { ConditionalCheckFailedException, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  BatchWriteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -59,7 +60,13 @@ type UserScanItem = {
   product_name: string;
   score: number;
   scanned_at: string;
+  product_category?: string;
 };
+
+function normalizeStoredCategory(raw: string | undefined): ProductCategory {
+  if (raw === "Alimento" || raw === "Cosmético" || raw === "Aseo") return raw;
+  return "Desconocido";
+}
 
 type ShoppingItem = {
   PK: string;
@@ -207,6 +214,7 @@ export async function upsertUserScan(params: {
   productUid: string;
   productName: string;
   score: number;
+  category: ProductCategory;
 }): Promise<void> {
   const timestamp = nowIso();
   const item: UserScanItem = {
@@ -217,6 +225,7 @@ export async function upsertUserScan(params: {
     product_name: params.productName,
     score: params.score,
     scanned_at: timestamp,
+    product_category: params.category,
   };
 
   await doc.send(
@@ -281,6 +290,7 @@ export async function getUserScans(userId: string): Promise<UserScanRecord[]> {
     productName: item.product_name,
     score: item.score,
     scannedAt: item.scanned_at,
+    category: normalizeStoredCategory(item.product_category),
   }));
 }
 
@@ -306,6 +316,53 @@ export async function getShoppingListItems(
     endocrineRiskCount: item.endocrine_risk_count,
     addedAt: item.added_at,
   }));
+}
+
+/** Borra todos los ítems de lista de compras del usuario (SK SHOPPING#…). */
+export async function clearShoppingListForUser(userId: string): Promise<number> {
+  return deleteUserItemsWithSkPrefix(userId, "SHOPPING#");
+}
+
+/** Borra entradas de historial de escaneos del usuario (SK SCAN#…). */
+export async function clearRecentScansForUser(userId: string): Promise<number> {
+  return deleteUserItemsWithSkPrefix(userId, "SCAN#");
+}
+
+async function deleteUserItemsWithSkPrefix(userId: string, skPrefix: string): Promise<number> {
+  const pk = userPk(userId);
+  let total = 0;
+  for (;;) {
+    const result = await doc.send(
+      new QueryCommand({
+        TableName: config.tableName,
+        KeyConditionExpression: "PK = :pk and begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": pk,
+          ":prefix": skPrefix,
+        },
+        Limit: 25,
+      }),
+    );
+    const raw = result.Items ?? [];
+    if (raw.length === 0) {
+      break;
+    }
+    const keys = raw.map((it) => ({
+      PK: it.PK as string,
+      SK: it.SK as string,
+    }));
+    await doc.send(
+      new BatchWriteCommand({
+        RequestItems: {
+          [config.tableName]: keys.map((key) => ({
+            DeleteRequest: { Key: key },
+          })),
+        },
+      }),
+    );
+    total += keys.length;
+  }
+  return total;
 }
 
 export function evaluateShoppingList(items: ShoppingListItem[]): ShoppingListEvaluation {

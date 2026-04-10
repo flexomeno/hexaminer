@@ -85,11 +85,15 @@ export interface UploadUrlResponse {
   uploadUrl: string;
 }
 
+export type ProductCategory = ProductCoreInfo["categoria"];
+
 export interface UserScanRecord {
   productUid: string;
   productName: string;
   score: number;
   scannedAt: string;
+  /** Ausente en respuestas de API antiguas; se trata como Desconocido en la UI. */
+  category?: ProductCategory;
 }
 
 export interface ShoppingListItem {

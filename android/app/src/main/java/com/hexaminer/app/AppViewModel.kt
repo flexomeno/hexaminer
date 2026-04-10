@@ -112,6 +112,26 @@ class AppViewModel(
         }
     }
 
+    /** Vacía solo la lista de compras en Dynamo (el historial de escaneos no se toca). */
+    fun clearShoppingListOnly() {
+        viewModelScope.launch {
+            _ui.update { it.copy(loading = true, error = null) }
+            try {
+                val uid = userPreferences.currentUserId()
+                repository.resetSession(uid, shoppingList = true, recentScans = false)
+                val dash = repository.loadDashboard(uid)
+                _ui.update { it.copy(loading = false, dashboard = dash) }
+            } catch (e: Exception) {
+                _ui.update {
+                    it.copy(
+                        loading = false,
+                        error = e.message ?: e.toString(),
+                    )
+                }
+            }
+        }
+    }
+
     /** Carga el producto desde Dynamo (historial / lista) y navega a detalle. */
     fun openProductByUid(productUid: String, onLoaded: () -> Unit) {
         viewModelScope.launch {

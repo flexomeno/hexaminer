@@ -35,4 +35,7 @@ interface HexaminerApi {
 
     @POST("shopping-list/evaluate")
     suspend fun evaluate(@Body body: EvaluateRequest): EvaluateResponse
+
+    @POST("shopping-list/reset")
+    suspend fun resetSession(@Body body: ResetSessionRequest): ResetSessionResponse
 }
