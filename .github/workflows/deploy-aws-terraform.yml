@@ -1,0 +1,70 @@
+# Despliega Lambdas (esbuild) + Terraform en AWS usando OIDC (sin access key en GitHub).
+#
+# Prerrequisitos en AWS:
+# 1) IAM Identity Provider OIDC para token.actions.githubusercontent.com
+# 2) Rol IAM con política de confianza que permita a este repo asumir el rol, p. ej.:
+#    "token.actions.githubusercontent.com" + aud "sts.amazonaws.com" + sub "repo:ORG/hexaminer:ref:refs/heads/main"
+# 3) Permisos en ese rol: lo que tu Terraform aplique (Lambda, API GW, DynamoDB, S3, IAM, etc.)
+#
+# Secretos en GitHub (Settings → Secrets → Actions):
+#   AWS_ROLE_ARN        → arn:aws:iam::ACCOUNT:role/github-actions-terraform
+#   OPENAI_API_KEY      → se inyecta como TF_VAR_openaikey (o usa otro nombre y ajusta env)
+#
+# Opcional: backend remoto S3 para terraform state (configura en terraform/backend.tf o -backend-config).
+
+name: Deploy AWS (Lambdas + Terraform)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "services/api/**"
+      - "terraform/**"
+      - ".github/workflows/deploy-aws-terraform.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_openaikey: ${{ secrets.OPENAI_API_KEY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/api/package-lock.json
+
+      - name: Build Lambda bundles (Terraform)
+        working-directory: services/api
+        run: |
+          npm ci
+          npm run build:terraform
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve
+        # Añade -var-file o más TF_VAR_* según variables.tf (stage, cors, etc.)

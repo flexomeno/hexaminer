@@ -13,4 +13,5 @@ apps/web/tsconfig.tsbuildinfo
 services/api/node_modules/
 services/api/.serverless/
 services/api/.build/
+services/api/.venv/
 openaikey*

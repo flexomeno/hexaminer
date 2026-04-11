@@ -277,3 +277,67 @@ export async function analyzeProductImageWithOpenAI(
 ): Promise<ProductAiAnalysis> {
   return analyzeProductImagesWithOpenAI([imageBytes]);
 }
+
+const TEXT_REGRADE_PREFIX = `No hay imágenes nuevas. Tienes un análisis previo en JSON.
+Tu tarea es volver a generar el objeto de análisis completo aplicando EXACTAMENTE las mismas reglas y el mismo formato JSON que en el mensaje de sistema.
+Puedes corregir puntaje global, calificaciones por ingrediente (bueno/regular/riesgo), descripciones, justificaciones, alertas, veredicto y recomendación según las directrices actuales.
+Mantén la exhaustividad de ingredientes: el array analisis_quimico debe incluir todos los ingredientes del análisis previo (mismos nombres salvo que fusiones duplicados obvios); no reduzcas la lista por brevedad.
+Responde con un único objeto JSON válido (sin markdown).`;
+
+/**
+ * Re-evalúa un producto usando solo el análisis estructurado previo (mismo SYSTEM_PROMPT que visión).
+ * Sirve para aplicar un prompt actualizado sin volver a subir fotos.
+ */
+export async function reanalyzeProductFromPriorAnalysis(
+  prior: ProductAiAnalysis,
+): Promise<ProductAiAnalysis> {
+  const userText = `${TEXT_REGRADE_PREFIX}
+
+JSON de referencia:
+${JSON.stringify(prior)}`;
+
+  const maxAttempts = 3;
+  let lastError: Error = new Error("OpenAI reanalyze failed");
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const completion = await getClient().responses.create({
+        model: config.openAiModel,
+        max_output_tokens: config.openAiMaxOutputTokens,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: SYSTEM_PROMPT }],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: userText }],
+          },
+        ],
+        text: { format: { type: "json_object" } },
+      });
+
+      const text = completion.output_text?.trim();
+      if (!text) {
+        throw new Error("OpenAI did not return output_text");
+      }
+
+      const result = parseAnalysisFromModelOutput(text);
+      if (result.producto.puntaje_global < 0) {
+        result.producto.puntaje_global = 0;
+      }
+      if (result.producto.puntaje_global > 20) {
+        result.producto.puntaje_global = 20;
+      }
+      return result;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const waitMs = isRateLimitError(err) ? 2500 * (attempt + 1) : 900 * (attempt + 1);
+      if (attempt < maxAttempts - 1) {
+        await sleep(waitMs);
+      }
+    }
+  }
+
+  throw lastError;
+}

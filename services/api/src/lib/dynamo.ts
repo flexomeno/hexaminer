@@ -5,6 +5,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { createHash } from "node:crypto";
@@ -15,10 +16,10 @@ import type {
   AnalysisJobSummary,
   ChemicalAnalysisItem,
   ProductAiAnalysis,
-  ProductRecord,
   ProductCategory,
-  ShoppingListItem,
+  ProductRecord,
   ShoppingListEvaluation,
+  ShoppingListItem,
   UserScanRecord,
 } from "../types/domain";
 
@@ -48,7 +49,7 @@ type ProductItem = {
   chemical_analysis: ProductAiAnalysis["analisis_quimico"];
   verdict: string;
   recommendation: string;
-  analysis_raw: ProductAiAnalysis;
+  analysis_raw?: ProductAiAnalysis;
   last_updated: string;
 };
 
@@ -116,6 +117,98 @@ function toProductRecord(item: ProductItem): ProductRecord {
   };
 }
 
+/** Fila PROFILE de producto (para jobs batch como regrade). */
+export type ScannedProductProfile = {
+  uid: string;
+  name: string;
+  brand: string;
+  category: string;
+  score: number;
+  chemical_analysis: ProductAiAnalysis["analisis_quimico"];
+  endocrine_alerts: string[];
+  health_alert: string;
+  labor_ethics: string;
+  verdict: string;
+  recommendation: string;
+  analysis_raw?: ProductAiAnalysis;
+};
+
+function mapProductItemToScannedProfile(item: ProductItem): ScannedProductProfile {
+  return {
+    uid: item.uid,
+    name: item.name,
+    brand: item.brand,
+    category: item.category,
+    score: item.score,
+    chemical_analysis: item.chemical_analysis,
+    endocrine_alerts: item.endocrine_alerts,
+    health_alert: item.health_alert,
+    labor_ethics: item.labor_ethics,
+    verdict: item.verdict,
+    recommendation: item.recommendation,
+    analysis_raw: item.analysis_raw,
+  };
+}
+
+/**
+ * Una página de Scan sobre perfiles de producto (PK PRODUCT#, SK PROFILE).
+ * `Limit` es de ítems evaluados por Dynamo antes del filtro; puede devolver pocos resultados.
+ */
+export async function scanProductProfilePage(params: {
+  limit?: number;
+  exclusiveStartKey?: Record<string, unknown>;
+}): Promise<{
+  items: ScannedProductProfile[];
+  lastEvaluatedKey?: Record<string, unknown>;
+}> {
+  const result = await doc.send(
+    new ScanCommand({
+      TableName: config.tableName,
+      FilterExpression: "entityType = :et AND SK = :sk",
+      ExpressionAttributeValues: {
+        ":et": "PRODUCT",
+        ":sk": "PROFILE",
+      },
+      Limit: params.limit ?? 120,
+      ExclusiveStartKey: params.exclusiveStartKey,
+    }),
+  );
+
+  const items = (result.Items as ProductItem[] | undefined)?.map(mapProductItemToScannedProfile) ?? [];
+  return {
+    items,
+    lastEvaluatedKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
+  };
+}
+
+export function buildPriorAnalysisFromProfile(row: ScannedProductProfile): ProductAiAnalysis | null {
+  if (row.analysis_raw?.producto?.nombre) {
+    return row.analysis_raw;
+  }
+  if (row.chemical_analysis?.length) {
+    const cat = row.category;
+    const categoria: ProductCategory =
+      cat === "Alimento" || cat === "Cosmético" || cat === "Aseo" ? cat : "Desconocido";
+    return {
+      producto: {
+        nombre: row.name,
+        marca: row.brand,
+        categoria,
+        puntaje_global: row.score,
+      },
+      analisis_quimico: row.chemical_analysis,
+      alertas: {
+        endocrinas: row.endocrine_alerts ?? [],
+        salud: row.health_alert ?? "",
+        etica_laboral: row.labor_ethics ?? "",
+      },
+      veredicto: row.verdict,
+      recomendacion: row.recommendation,
+    };
+  }
+  return null;
+}
+
 export async function getProductByUid(uid: string): Promise<ProductRecord | null> {
   const result = await doc.send(
     new GetCommand({
@@ -126,6 +219,21 @@ export async function getProductByUid(uid: string): Promise<ProductRecord | null
 
   const item = result.Item as ProductItem | undefined;
   return item ? toProductRecord(item) : null;
+}
+
+/** Perfil almacenado para regrade (incluye analysis_raw si existe). */
+export async function getProductProfileForRegrade(uid: string): Promise<ScannedProductProfile | null> {
+  const result = await doc.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: productKey(uid),
+    }),
+  );
+  const item = result.Item as ProductItem | undefined;
+  if (!item || item.entityType !== "PRODUCT") {
+    return null;
+  }
+  return mapProductItemToScannedProfile(item);
 }
 
 export async function putProductAnalysis(

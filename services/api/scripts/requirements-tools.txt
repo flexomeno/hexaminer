@@ -1,0 +1,3 @@
+# Scripts auxiliares (find_product_by_name, regrade_products_loop).
+# Uso: desde services/api → python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements-tools.txt
+boto3>=1.34

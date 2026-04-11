@@ -66,6 +66,15 @@ locals {
       memory    = 256
       extra_env = {}
     }
+    # Sin ruta HTTP: invocar con aws lambda invoke (evita abuso de OpenAI en público).
+    regradeProducts = {
+      route_key = null
+      timeout   = 300
+      memory    = 1024
+      extra_env = {
+        REGRADE_DELAY_MS = "1500"
+      }
+    }
   }
 
   lambda_http_functions = {
