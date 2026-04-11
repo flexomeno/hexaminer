@@ -16,6 +16,7 @@ services/api                  # Código de Lambdas (TypeScript)
   src/handlers
   src/lib                     # openai.ts (prompt), dynamo.ts, s3.ts, …
   src/types
+  scripts                     # bundle-lambda-terraform.mjs; Python: regrade loop, búsqueda Dynamo
   serverless.yml              # Despliegue alternativo con Serverless Framework
 
 terraform/                    # Infraestructura como código (recomendado en este repo)
@@ -31,10 +32,11 @@ Hay **dos formas** de desplegar lo mismo conceptualmente:
 Directorio `terraform/`: define API Gateway HTTP, Lambdas, DynamoDB, S3, IAM, CORS en S3 para subidas desde el navegador. Lista detallada de archivos en **`terraform/README.md`**.
 
 - **API Gateway HTTP API** con CORS abierto para el API.
-- **Lambdas** (mismas rutas que abajo).
+- **Lambdas**: rutas HTTP (tabla abajo), worker **`processAnalysisJob`** ligado a **SQS**, y **`regradeProducts`** (solo invocación directa; no expuesta en API Gateway).
+- **SQS**: cola (y DLQ) para encolar análisis asíncronos (`startAnalyzeJob` → `processAnalysisJob`).
 - **DynamoDB**: una tabla (`PK`, `SK`) + GSI1.
 - **S3**: bucket privado, cifrado, política TLS, **CORS** para `PUT` desde orígenes del front (p. ej. `localhost:3000`).
-- **IAM**: rol de Lambda con logs, DynamoDB y S3 del bucket.
+- **IAM**: rol de Lambda con logs, DynamoDB, S3 del bucket y SQS según política en `terraform/iam.tf`.
 
 ### B) Serverless Framework
 
@@ -42,11 +44,27 @@ Archivo principal: `services/api/serverless.yml` — mismos recursos lógicos; *
 
 ### Endpoints HTTP
 
-- `analyzeProduct` → `POST /analyze-product`
-- `getUploadUrl` → `POST /upload-url`
-- `addShoppingListItem` → `POST /shopping-list/items`
-- `evaluateShoppingList` → `POST /shopping-list/evaluate`
-- `getUserDashboard` → `GET /dashboard`
+| Método y ruta | Handler |
+|---------------|---------|
+| `POST /analyze-product` | `analyzeProduct` |
+| `POST /analyze-product/start` | `startAnalyzeJob` |
+| `GET /analyze-product/job` | `getAnalyzeJob` |
+| `POST /upload-url` | `getUploadUrl` |
+| `GET /product` | `getProduct` |
+| `GET /dashboard` | `getUserDashboard` |
+| `POST /shopping-list/items` | `addShoppingListItem` |
+| `POST /shopping-list/evaluate` | `evaluateShoppingList` |
+| `POST /shopping-list/reset` | `resetUserSession` |
+
+### Análisis asíncrono (SQS)
+
+1. El cliente llama `POST /analyze-product/start`; la Lambda encola un mensaje en SQS.
+2. `processAnalysisJob` consume la cola, ejecuta el pipeline de análisis y persiste en DynamoDB.
+3. El cliente consulta progreso con `GET /analyze-product/job` (parámetros según implementación del handler).
+
+### Operación: regrade masivo (`regradeProducts`)
+
+Lambda **sin URL pública**: sirve para **re-ejecutar el modelo** con el prompt desplegado usando datos ya almacenados (texto/JSON previo), actualizando el mismo ítem `PRODUCT#uid` / `PROFILE`. Útil tras cambiar `openai.ts` sin borrar la tabla. Detalle de payload, límites por invocación y scripts: **`services/api/README.md`**.
 
 ## Prompt de OpenAI
 
@@ -67,7 +85,8 @@ Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de 
    - `SK = PROFILE`
    - `GSI1PK = BARCODE#{uid}`
    - `GSI1SK = PRODUCT`
-   - Campos: `id, uid, barcode, name, ingredients, score, disruptors_summary, labor_ethics, last_updated, ...`
+   - `entityType = PRODUCT`
+   - Campos principales: `name`, `brand`, `category`, `ingredients`, `score`, `chemical_analysis`, `verdict`, `recommendation`, `analysis_raw` (JSON completo del análisis cuando existe), `last_updated`, etc. La marca suele ir en `brand` y el nombre comercial en `name` (búsquedas por texto deben considerar ambos).
 
 2. **Usuario perfil**
    - `PK = USER#{userId}`
@@ -91,7 +110,7 @@ Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de 
 ## Flujo cache-first (`analyzeProduct`)
 
 1. Frontend sube una o varias imágenes a S3 (`/upload-url` por archivo).
-2. Frontend llama `/analyze-product` con `imageKey` (una) o `imageKeys` (varias, máx. 12).
+2. Frontend llama `/analyze-product` con `imageKey` (una) o `imageKeys` (varias, máx. 12), o usa el flujo **asíncrono** (`/analyze-product/start` + `/analyze-product/job`).
 3. Lambda:
    - descarga todas las imágenes de S3,
    - extrae UID (barcode en cualquier foto, fallback hash estable del conjunto de bytes),
@@ -104,6 +123,8 @@ Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de 
    - guarda en tabla Products,
    - actualiza historial del usuario,
    - retorna resultado (`source = "openai"`).
+
+Para **actualizar** análisis ya guardados tras cambiar el prompt, ver Lambda `regradeProducts` en **`services/api/README.md`**.
 
 ## Shopping List Evaluator
 

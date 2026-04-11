@@ -1,6 +1,6 @@
 # Terraform – API Hexaminer
 
-Despliega en tu cuenta AWS: **DynamoDB** (single-table + GSI1), **S3** (privado, cifrado, política TLS, **CORS** para PUT desde el navegador), **IAM** (rol Lambda + política de datos), **5 Lambdas** (Node.js 20) y **API Gateway HTTP** (CORS).
+Despliega en tu cuenta AWS: **DynamoDB** (single-table + GSI1), **S3** (privado, cifrado, política TLS, **CORS** para PUT desde el navegador), **SQS** (cola + DLQ para análisis asíncronos), **IAM** (rol Lambda + política de datos), **varias Lambdas** Node.js 20 (rutas HTTP + consumidor SQS + `regradeProducts` solo por invoke) y **API Gateway HTTP** (CORS).
 
 ## Archivos en este directorio
 
@@ -13,8 +13,10 @@ Despliega en tu cuenta AWS: **DynamoDB** (single-table + GSI1), **S3** (privado,
 | `data.tf` | `aws_caller_identity` (nombre único del bucket S3) |
 | `dynamodb.tf` | Tabla `PK`/`SK` + índice `GSI1` |
 | `s3.tf` | Bucket, bloqueo público, cifrado, **CORS**, política de denegación sin TLS |
-| `iam.tf` | Rol de ejecución Lambda, `AWSLambdaBasicExecutionRole`, política DynamoDB + S3 |
-| `lambda.tf` | `archive_file` por función + `aws_lambda_function` (env: `TABLE_NAME`, `BUCKET_NAME`, `OPENAI_*`) |
+| `sqs.tf` | Cola de jobs de análisis, DLQ, event source mapping → `processAnalysisJob` |
+| `iam.tf` | Rol de ejecución Lambda, `AWSLambdaBasicExecutionRole`, política DynamoDB + S3 + SQS |
+| `lambda.tf` | `archive_file` por función + `aws_lambda_function` (env: `TABLE_NAME`, `BUCKET_NAME`, `OPENAI_*`, cola donde aplique) |
+| `locals.tf` | Mapa de Lambdas: `route_key` HTTP o `null` (SQS / solo invoke) |
 | `apigateway.tf` | API HTTP, stage `$default`, integraciones `AWS_PROXY`, rutas, permisos de invocación |
 | `outputs.tf` | `api_base_url`, nombres de tabla y bucket, región |
 | `terraform.tfvars.example` | Plantilla de variables (no commitear secretos) |
@@ -76,6 +78,13 @@ cd ../terraform && terraform apply
 - `dynamodb_table_name` – nombre de la tabla  
 - `s3_bucket_name` – bucket de subidas  
 - `aws_region`
+
+## Lambdas sin ruta HTTP
+
+- **`processAnalysisJob`:** disparada por mensajes en la cola SQS (no uses `invoke` manual salvo pruebas).
+- **`regradeProducts`:** re-análisis masivo con el prompt actual; **solo** `aws lambda invoke` o script en `services/api/scripts/regrade_products_loop.py`. Nombre típico: `{project_name}-{stage}-regradeProducts` (p. ej. `product-analysis-api-dev-regradeProducts`). Invocaciones largas: en AWS CLI añade `--cli-read-timeout 0` (el default ~60 s corta antes de que termine la Lambda).
+
+Documentación de payload y herramientas: **[`../services/api/README.md`](../services/api/README.md)**.
 
 ## Estado remoto (equipos)
 

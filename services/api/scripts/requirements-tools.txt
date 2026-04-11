@@ -1,3 +1,4 @@
-# Scripts auxiliares (find_product_by_name, regrade_products_loop).
-# Uso: desde services/api → python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements-tools.txt
+# Dependencias de scripts/ (operación Dynamo + Lambda).
+# Ver services/api/README.md → «Herramientas Python».
+#   cd services/api && python3 -m venv .venv && source .venv/bin/activate && pip install -r scripts/requirements-tools.txt
 boto3>=1.34
