@@ -21,7 +21,7 @@ La infra desplegada con **Terraform** incluye: **API Gateway HTTP**, **varias La
 
 ## Frontend (`apps/web`)
 
-Rutas: `/` (landing), `/camera` (foto y análisis), `/dashboard` (historial y canasta).
+Rutas: `/` (landing), `/camera` (foto y análisis), `/dashboard` (historial y canasta). Opcional: **`/admin`** (productos e ingredientes en Dynamo, solo lectura) y listas blancas de correo; ver [`apps/web/README.md`](apps/web/README.md).
 
 Variables en `apps/web/.env.local`:
 
@@ -94,6 +94,8 @@ Si cambias el prompt y quieres **reevaluar productos ya guardados** sin borrar f
 |--------|-----|
 | `analyze-label.sh` | Sube una imagen local al API y muestra el JSON del análisis. `-h` para ayuda. |
 | `test-openai-responses.sh` | Prueba `https://api.openai.com/v1/responses` con `TF_VAR_openaikey` u `OPENAI_API_KEY`. |
+| `verification-ec2-ip.sh` | IP de la EC2 de verificación (Terraform). |
+| `verification-ec2-ssh-key.sh` | Ruta del `.pem` generado por Terraform (Ansible `--private-key`). |
 
 ---
 
@@ -125,3 +127,6 @@ Variables: `OPENAI_API_KEY` y las definidas en `serverless.yml`.
 | [`terraform/terraform.tfvars.example`](terraform/terraform.tfvars.example) | Ejemplo de variables (no commitear secretos) |
 | [`android/README.md`](android/README.md) | App Android nativa (API URL, Google OAuth opcional) |
 | [`docs/descripcion-y-politica-de-datos.md`](docs/descripcion-y-politica-de-datos.md) | Texto de producto y privacidad (plantilla) |
+| [`ansible/README.md`](ansible/README.md) | EC2 de verificación: Terraform + Ansible (efímera) |
+| [`docs/web-panel-ec2.md`](docs/web-panel-ec2.md) | Cómo montar la web + paneles admin en EC2 (Next, IAM, Ansible) |
+| [`docs/despliegue-ec2-paso-a-paso.md`](docs/despliegue-ec2-paso-a-paso.md) | Guía paso a paso: Terraform EC2, Ansible, build Next, rsync, verificación |

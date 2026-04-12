@@ -30,6 +30,8 @@ permissions:
 env:
   AWS_REGION: us-east-1
   TF_VAR_openaikey: ${{ secrets.OPENAI_API_KEY }}
+  # La EC2 de verificación queda para apply local (ipify + clave PEM). En el runner la IP no es la tuya.
+  TF_VAR_verify_ec2_enabled: false
 
 jobs:
   deploy:

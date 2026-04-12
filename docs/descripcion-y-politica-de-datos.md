@@ -17,12 +17,13 @@ Esta política describe cómo se tratan los datos personales y la información q
 - **Datos de cuenta (opcional):** si inicias sesión (por ejemplo con Google en la versión web), podemos recibir y almacenar identificadores y datos básicos de perfil que facilite el proveedor de identidad (correo, nombre o imagen de perfil, según configuración).
 - **Identificador de uso:** un identificador asociado a tu sesión o dispositivo para vincular tu historial de escaneos y tu lista de compras en nuestros sistemas.
 - **Imágenes que envías:** fotografías de envases, etiquetas, tablas nutricionales o listas de ingredientes que subes para analizar un producto.
-- **Datos derivados del servicio:** resultados del análisis (puntuaciones, textos explicativos, clasificación del producto, metadatos técnicos como fechas o identificadores de trabajo), registros técnicos necesarios para operar el servicio (logs, diagnóstico de errores) y, en su caso, direcciones IP o datos de navegación propios del protocolo HTTP.
+- **Datos derivados del servicio:** resultados del análisis (puntuaciones, textos explicativos, clasificación del producto, metadatos técnicos como fechas o identificadores de trabajo), registros técnicos necesarios para operar el servicio (logs, diagnóstico de errores) y, en su caso, direcciones IP o datos de navegación propios del protocolo HTTP. Esos resultados pueden **actualizarse** cuando mejoremos el modelo o los criterios (reevaluación sobre la información del producto ya almacenada), sin que tengas que volver a fotografiar ese producto para ello.
 
 ### 2. Para qué los usamos (finalidades)
 
 - Proporcionar el análisis de productos y mostrarte el resultado en la aplicación.
 - Mantener tu **historial de escaneos** y tu **lista de compras** vinculados a tu identificador de usuario.
+- **Mantener y mejorar la base de datos de productos analizados** (caché compartida por identificador de producto), incluida la **reevaluación** de análisis ya guardados cuando actualicemos la inteligencia artificial o las reglas de puntuación, para coherencia del servicio.
 - Mejorar la fiabilidad del servicio, la seguridad y el soporte (p. ej. depuración y prevención de abuso).
 - Cumplir obligaciones legales aplicables cuando proceda.
 
@@ -66,6 +67,10 @@ Podemos actualizar este documento para reflejar cambios legales o del producto. 
 ### 10. Limitación de responsabilidad informativa
 
 Los análisis generados por IA pueden contener **errores u omisiones**. La información es orientativa y no sustituye etiquetado oficial, regulación sanitaria ni asesoramiento profesional.
+
+### 11. Recordatorio operativo (reevaluación de productos)
+
+Para el **equipo**: cuando cambie el prompt o la lógica de análisis, se puede **volver a generar** el resultado de productos ya existentes en base de datos (mismo identificador de producto, sin endpoint público de abuso). En el repositorio está documentado en **[`services/api/README.md`](../services/api/README.md)** (Lambda `regradeProducts`, scripts Python y variables de entorno). A efectos de privacidad, la operación afecta sobre todo a **datos derivados del producto** en caché; el historial del usuario sigue enlazando al mismo producto.
 
 ---
 

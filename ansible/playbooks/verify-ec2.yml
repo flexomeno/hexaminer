@@ -1,0 +1,51 @@
+---
+# Aprovisiona la EC2 de verificación (Amazon Linux 2023).
+# Inventario: IP desde terraform output (ver ansible/README.md).
+- name: Base para verificaciones Hexaminer en EC2
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    node_major: "20"
+
+  pre_tasks:
+    - name: Esperar SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Actualizar caché dnf
+      ansible.builtin.command: dnf makecache -y
+      changed_when: false
+
+  tasks:
+    - name: Paquetes base
+      ansible.builtin.dnf:
+        name:
+          - git
+          - tar
+          - gzip
+        state: present
+
+    - name: Instalar Node.js {{ node_major }}.x (NodeSource + dnf)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        curl -fsSL https://rpm.nodesource.com/setup_{{ node_major }}.x | bash -
+        dnf install -y nodejs
+      args:
+        creates: /usr/bin/node
+
+    - name: Comprobar Node y npm
+      ansible.builtin.command: "{{ item }}"
+      register: ver
+      changed_when: false
+      loop:
+        - node -v
+        - npm -v
+
+    - name: Mostrar versiones
+      ansible.builtin.debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ ver.results }}"
+      loop_control:
+        label: "{{ item.item }}"

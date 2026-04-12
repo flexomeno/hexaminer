@@ -21,6 +21,8 @@ services/api                  # Código de Lambdas (TypeScript)
 
 terraform/                    # Infraestructura como código (recomendado en este repo)
   *.tf                        # Ver terraform/README.md para lista de archivos
+
+ansible/                      # Playbooks para aprovisionar la EC2 opcional de verificación (ver ansible/README.md)
 ```
 
 ## Infraestructura AWS

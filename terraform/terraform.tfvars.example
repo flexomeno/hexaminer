@@ -18,3 +18,21 @@ stage        = "dev"
 
 # Orígenes para subida de fotos desde el navegador (CORS en S3). Añade tu dominio en producción:
 # s3_cors_allowed_origins = ["http://localhost:3000", "https://tu-app.vercel.app"]
+
+# --- EC2 de verificación (por defecto en variables.tf: enabled + ipify + clave generada) ---
+# Desactivar del todo:
+# verify_ec2_enabled = false
+#
+# Sin autodetectar IP (CI o red sin salida a ipify); SSH solo desde estos CIDRs:
+# verify_ssh_cidr_auto   = false
+# verify_ssh_cidr_ipv4   = ["203.0.113.10/32"]
+#
+# Usar tu propia clave en lugar de terraform/.ssh/verification_ec2.pem:
+# verify_ec2_generate_ssh_key = false
+# verify_ec2_public_key       = "ssh-ed25519 AAAA... comentario"
+#   # o: verify_ec2_existing_key_name = "mi-keypair-en-aws"
+#
+# verify_ec2_instance_type = "t3.micro"
+#
+# Si la VPC por defecto no tiene subnets (error en plan/apply):
+# verify_ec2_subnet_id = "subnet-xxxxxxxx"

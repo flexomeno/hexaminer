@@ -5,10 +5,10 @@ locals {
   # route_key null = Lambda sin ruta HTTP (p. ej. worker SQS).
   lambda_functions = {
     analyzeProduct = {
-      route_key  = "POST /analyze-product"
-      timeout    = 120
-      memory     = 2048
-      extra_env  = {}
+      route_key = "POST /analyze-product"
+      timeout   = 120
+      memory    = 2048
+      extra_env = {}
     }
     startAnalyzeJob = {
       route_key = "POST /analyze-product/start"

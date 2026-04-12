@@ -5,3 +5,4 @@
 *.tfvars
 !terraform.tfvars.example
 .build/
+.ssh/

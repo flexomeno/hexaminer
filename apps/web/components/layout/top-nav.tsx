@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Camera, LayoutDashboard, LogIn, ScanLine } from "lucide-react";
+import { Camera, LayoutDashboard, LogIn, ScanLine, Shield } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const baseNavItems = [
   { href: "/", label: "Inicio", icon: ScanLine },
   { href: "/camera", label: "Cámara", icon: Camera },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 
-export function TopNav() {
+export function TopNav({ showAdminLink = false }: { showAdminLink?: boolean }) {
   const pathname = usePathname();
+  const navItems = showAdminLink
+    ? [...baseNavItems, { href: "/admin", label: "Visibilidad", icon: Shield }]
+    : baseNavItems;
 
   return (
     <header className="border-b bg-white/70 backdrop-blur">
@@ -25,7 +28,9 @@ export function TopNav() {
             const active =
               item.href === "/dashboard"
                 ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/")
-                : pathname === item.href;
+                : item.href === "/admin"
+                  ? pathname === "/admin" || pathname?.startsWith("/admin/")
+                  : pathname === item.href;
             return (
               <Link
                 key={item.href}
@@ -44,11 +49,11 @@ export function TopNav() {
           })}
           <button
             type="button"
-            onClick={() => signIn("google")}
+            onClick={() => signIn()}
             className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
           >
             <LogIn className="size-4" />
-            Login Google
+            Entrar
           </button>
         </nav>
       </div>

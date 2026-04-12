@@ -10,5 +10,21 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
