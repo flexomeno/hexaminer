@@ -114,7 +114,8 @@ Por SSH:
 ssh -i ~/.ssh/id_ed25519 ec2-user@$IP
 ```
 
-Crea en el servidor el archivo **`~/hexaminer-web/.env.production`** (no va en el repo ni en el `rsync` por defecto) con las variables del paso 4. Sin este archivo, `NEXTAUTH_SECRET` no se carga y verás `NO_SECRET` / `error=Configuration`.
+Crea en el servidor el archivo **`~/hexaminer-web/.env.production`** (no va en el repo ni en el `rsync` por defecto) con las variables del paso 4.  
+Sin este archivo, `NEXTAUTH_SECRET` no se carga y verás `NO_SECRET` / `error=Configuration`.
 
 ```bash
 cd ~/hexaminer-web
@@ -126,7 +127,80 @@ node server.js
 
 (Líneas `VAR=valor` sin espacios alrededor del `=`. El patrón `export $(grep … | xargs)` suele fallar si el archivo no existe o si los valores tienen caracteres especiales.)
 
-Para producción usa **systemd** (unidad que haga `EnvironmentFile=/home/ec2-user/hexaminer-web/.env.production` y `ExecStart=/usr/bin/node server.js`, `WorkingDirectory=...`). Puedes automatizar esto en Ansible en un segundo playbook.
+### 6.1 Arranque automático al iniciar EC2 (script + systemd)
+
+Solución aplicada: **script de arranque + systemd** para que el servicio suba solo al boot y para calcular `NEXTAUTH_URL` desde la IP actual de la instancia.
+
+> Recomendación: deja `NEXTAUTH_URL` fuera de `.env.production`; el script la calcula y la exporta en cada inicio.
+
+1) Crea el script `~/hexaminer-web/start.sh`:
+
+```bash
+cat > ~/hexaminer-web/start.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/ec2-user/hexaminer-web
+
+# Carga variables base (NEXTAUTH_SECRET, TABLE_NAME, etc.)
+set -a
+source /home/ec2-user/hexaminer-web/.env.production
+set +a
+
+# IMDSv2: toma IP pública; si no existe, usa la privada.
+TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
+  -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')"
+IP="$(curl -sf -H \"X-aws-ec2-metadata-token: ${TOKEN}\" \
+  http://169.254.169.254/latest/meta-data/public-ipv4 \
+  || curl -sf -H \"X-aws-ec2-metadata-token: ${TOKEN}\" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)"
+
+export NEXTAUTH_URL="http://${IP}:3000"
+exec /usr/bin/node /home/ec2-user/hexaminer-web/server.js
+EOF
+
+chmod +x ~/hexaminer-web/start.sh
+```
+
+2) Crea el servicio systemd:
+
+```bash
+sudo tee /etc/systemd/system/hexaminer-web.service > /dev/null <<'EOF'
+[Unit]
+Description=Hexaminer Web (Next standalone)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/hexaminer-web
+ExecStart=/home/ec2-user/hexaminer-web/start.sh
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+3) Habilita y arranca:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable hexaminer-web
+sudo systemctl start hexaminer-web
+```
+
+4) Logs y control:
+
+```bash
+sudo systemctl status hexaminer-web
+sudo journalctl -u hexaminer-web -f
+sudo systemctl restart hexaminer-web
+```
 
 ---
 
@@ -184,6 +258,6 @@ cd terraform && terraform apply
 - [ ] `npm run build` en `apps/web` (standalone)  
 - [ ] `rsync` standalone + static + public  
 - [ ] `.env.production` en servidor con `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `NEXT_PUBLIC_API_BASE_URL`, `TABLE_NAME`, y (Google **o** `NEXTAUTH_CREDENTIALS_*`; listas de correo opcionales)  
-- [ ] `node server.js` o systemd + acceso por túnel o SG puerto 3000  
+- [ ] `hexaminer-web.service` habilitado (`systemctl enable --now`) + acceso por túnel o SG puerto 3000  
 - [ ] Probar `/admin`  
 - [ ] Parar instancia al acabar  
