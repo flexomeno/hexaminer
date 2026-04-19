@@ -34,7 +34,6 @@ class AppViewModel(
 
     init {
         viewModelScope.launch {
-            userPreferences.ensureUserId()
             userPreferences.userId.collect { id ->
                 _ui.update { it.copy(userIdLabel = id) }
             }
@@ -60,9 +59,18 @@ class AppViewModel(
     fun analyzeImages(uris: List<Uri>, onEnqueued: () -> Unit) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
+            val uid = userPreferences.getUserIdForApi()
+            if (uid == null) {
+                _ui.update {
+                    it.copy(
+                        loading = false,
+                        error = "Inicia sesión con Google para guardar escaneos y lista de compra.",
+                    )
+                }
+                return@launch
+            }
             _ui.update { it.copy(loading = true, error = null, infoHint = null) }
             try {
-                val uid = userPreferences.currentUserId()
                 val jobId = repository.uploadAndStartAnalysisJob(uris, uid)
                 _ui.update {
                     it.copy(
@@ -86,6 +94,7 @@ class AppViewModel(
     }
 
     private suspend fun silentRefreshDashboard(userId: String?) {
+        if (userId == null) return
         try {
             val dash = repository.loadDashboard(userId)
             _ui.update { it.copy(dashboard = dash) }
@@ -96,9 +105,13 @@ class AppViewModel(
 
     fun refreshDashboard() {
         viewModelScope.launch {
+            val uid = userPreferences.getUserIdForApi()
+            if (uid == null) {
+                _ui.update { it.copy(loading = false, dashboard = null) }
+                return@launch
+            }
             _ui.update { it.copy(loading = true, error = null) }
             try {
-                val uid = userPreferences.currentUserId()
                 val dash = repository.loadDashboard(uid)
                 _ui.update { it.copy(loading = false, dashboard = dash) }
             } catch (e: Exception) {
@@ -115,9 +128,17 @@ class AppViewModel(
     /** Vacía solo la lista de compras en Dynamo (el historial de escaneos no se toca). */
     fun clearShoppingListOnly() {
         viewModelScope.launch {
+            val uid = userPreferences.getUserIdForApi()
+            if (uid == null) {
+                _ui.update {
+                    it.copy(
+                        error = "Inicia sesión con Google para guardar escaneos y lista de compra.",
+                    )
+                }
+                return@launch
+            }
             _ui.update { it.copy(loading = true, error = null) }
             try {
-                val uid = userPreferences.currentUserId()
                 repository.resetSession(uid, shoppingList = true, recentScans = false)
                 val dash = repository.loadDashboard(uid)
                 _ui.update { it.copy(loading = false, dashboard = dash) }
@@ -135,9 +156,17 @@ class AppViewModel(
     /** Carga el producto desde Dynamo (historial / lista) y navega a detalle. */
     fun openProductByUid(productUid: String, onLoaded: () -> Unit) {
         viewModelScope.launch {
+            val uid = userPreferences.getUserIdForApi()
+            if (uid == null) {
+                _ui.update {
+                    it.copy(
+                        error = "Inicia sesión con Google para guardar escaneos y lista de compra.",
+                    )
+                }
+                return@launch
+            }
             _ui.update { it.copy(loading = true, error = null) }
             try {
-                val uid = userPreferences.currentUserId()
                 val product = repository.fetchProduct(productUid, uid)
                 _ui.update { it.copy(loading = false, lastProduct = product) }
                 onLoaded()
@@ -152,15 +181,35 @@ class AppViewModel(
         }
     }
 
-    fun onGoogleSignedIn(googleAccountId: String) {
+    /**
+     * Preferir el **email** de Google cuando exista: el API normaliza a `email#...` en Dynamo,
+     * igual que la web, y el historial / lista quedan recuperables al volver a entrar.
+     * Si no hay email, se usa el id numérico de Google (`provided#...` en servidor).
+     */
+    fun onGoogleSignedIn(userKey: String, successMessage: String) {
         viewModelScope.launch {
-            userPreferences.setUserId(googleAccountId)
+            try {
+                userPreferences.recordGoogleSession(userKey.trim())
+                _ui.update { it.copy(infoHint = successMessage) }
+                silentRefreshDashboard(userPreferences.getUserIdForApi())
+            } catch (e: Exception) {
+                _ui.update {
+                    it.copy(error = "No se pudo guardar la sesión: ${e.message ?: e.toString()}")
+                }
+            }
         }
     }
 
-    fun signOutAndReset() {
+    fun signOutOfCloudAccount() {
         viewModelScope.launch {
-            userPreferences.resetToNewAnonymous()
+            userPreferences.signOutFromCloud()
+            _ui.update {
+                it.copy(
+                    dashboard = null,
+                    lastProduct = null,
+                    infoHint = "Sesión cerrada. Vuelve a entrar para guardar datos en la nube.",
+                )
+            }
         }
     }
 }

@@ -21,6 +21,8 @@ Si no configuras nada, `BuildConfig.API_BASE_URL` queda en `https://example.com`
 
 En `app/src/main/res/values/strings.xml`, rellena `default_web_client_id` con el **Web client ID** del proyecto OAuth en Google Cloud (el mismo tipo que usa una app web). Si lo dejas vacío, no se muestra el botón “Entrar con Google”. La app sigue usando un **ID anónimo** guardado en DataStore y lo envía como `userId` en cuerpo/query para alinear escaneos y lista con el backend.
 
+Tras “Entrar con Google”, si la cuenta devuelve **email**, la app envía ese correo como `userId` y el API lo guarda como `email#...` en Dynamo (misma convención que la web). Así historial y lista de compras **se recuperan** al volver a iniciar sesión con la misma cuenta. Si Google no devuelve email, se usa el **id numérico** de la cuenta (`provided#...` en el servidor).
+
 ## Funciones
 
 - Elegir imagen de galería o **tomar foto** (cámara + `FileProvider`).

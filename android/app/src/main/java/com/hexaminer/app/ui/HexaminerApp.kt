@@ -1,5 +1,6 @@
 package com.hexaminer.app.ui
 
+import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -34,13 +35,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,7 +54,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.hexaminer.app.AppViewModel
 import com.hexaminer.app.AppViewModelFactory
 import com.hexaminer.app.R
@@ -58,10 +64,14 @@ import com.hexaminer.app.data.HexaminerRepository
 import com.hexaminer.app.data.UserPreferences
 import com.hexaminer.app.ui.screens.HistoryScreen
 import com.hexaminer.app.ui.screens.HomeScreen
+import com.hexaminer.app.ui.screens.LoginRequiredScreen
 import com.hexaminer.app.ui.screens.ProductDetailScreen
 import com.hexaminer.app.ui.screens.ShoppingListScreen
 import com.hexaminer.app.ui.theme.HexaminerTheme
 import com.hexaminer.app.ui.theme.MintBrand
+import com.hexaminer.app.util.googleAccountToUserKey
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val MAX_IMAGES = 12
 private const val STARTUP_LOADER_MS = 1600L
@@ -72,17 +82,17 @@ fun HexaminerApp(
     userPreferences: UserPreferences,
     googleClient: GoogleSignInClient,
 ) {
-    var showStartupLoader by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(STARTUP_LOADER_MS)
-        showStartupLoader = false
+    val sessionReadyNullable by produceState<Boolean?>(initialValue = null, userPreferences) {
+        delay(STARTUP_LOADER_MS)
+        userPreferences.sessionReady.collect { value = it }
     }
-    if (showStartupLoader) {
+    if (sessionReadyNullable == null) {
         HexaminerTheme {
             StartupLoaderScreen()
         }
         return
     }
+    val sessionReady = sessionReadyNullable == true
 
     val factory = remember(repository, userPreferences) {
         AppViewModelFactory(repository, userPreferences)
@@ -95,8 +105,11 @@ fun HexaminerApp(
     val showGoogle = webClientId.isNotBlank()
     val navBackStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val context = LocalContext.current
+    val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
 
     var pendingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(ui.error) {
         val msg = ui.error ?: return@LaunchedEffect
@@ -119,13 +132,69 @@ fun HexaminerApp(
     }
 
     val signInLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val id = account?.id
-            if (id != null) vm.onGoogleSignedIn(id)
-        } catch (_: ApiException) {
-            // ignorar cancelación o error
+        when (result.resultCode) {
+            Activity.RESULT_CANCELED -> return@rememberLauncherForActivityResult
+            Activity.RESULT_OK -> {
+                val data = result.data
+                if (data == null) {
+                    scope.launch {
+                        snackbar.showSnackbar("No se recibió la respuesta de Google. Vuelve a intentarlo.")
+                    }
+                    return@rememberLauncherForActivityResult
+                }
+                val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+                try {
+                    val account = task.getResult(ApiException::class.java)
+                    val email = account?.email?.trim()?.takeIf { it.contains("@") }
+                    val userKey = googleAccountToUserKey(account)
+                    if (!userKey.isNullOrBlank()) {
+                        val msg =
+                            if (email != null) {
+                                "Sesión iniciada. Tus escaneos y lista se guardan con esta cuenta."
+                            } else {
+                                "Sesión iniciada con Google. Tus datos se guardan con tu usuario."
+                            }
+                        vm.onGoogleSignedIn(userKey, msg)
+                    } else {
+                        scope.launch {
+                            snackbar.showSnackbar(
+                                "Google no devolvió correo ni identificador. Prueba otra cuenta o revisa permisos de la app.",
+                            )
+                        }
+                    }
+                } catch (e: ApiException) {
+                    val msg = when (e.statusCode) {
+                        GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> null
+                        CommonStatusCodes.NETWORK_ERROR ->
+                            "Sin conexión. Comprueba la red e inténtalo de nuevo."
+                        CommonStatusCodes.DEVELOPER_ERROR ->
+                            "Añade en Google Cloud la SHA-1 de «Firma de aplicaciones de Play» (Play Console → Integridad de la app). La tienda re-firma la app; el APK local usa otra huella."
+                        else ->
+                            "No se pudo completar el inicio con Google (código ${e.statusCode})."
+                    }
+                    if (msg != null) {
+                        scope.launch { snackbar.showSnackbar(msg) }
+                    }
+                }
+            }
+            else -> {
+                scope.launch {
+                    snackbar.showSnackbar("Inicio de sesión interrumpido (código ${result.resultCode}).")
+                }
+            }
+        }
+    }
+
+    /**
+     * Cierra la sesión local de Google y abre el selector.
+     * El callback de Task puede ejecutarse fuera del hilo principal;
+     * [ActivityResultLauncher.launch] debe hacerse en el main thread.
+     */
+    val requestGoogleSignIn: () -> Unit = {
+        googleClient.signOut().addOnCompleteListener {
+            mainExecutor.execute {
+                signInLauncher.launch(googleClient.signInIntent)
+            }
         }
     }
 
@@ -135,7 +204,7 @@ fun HexaminerApp(
             contentColor = MintBrand.Title,
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
-                if (currentRoute != "product") {
+                if (sessionReady && currentRoute != "product") {
                     NavigationBar(
                         containerColor = MintBrand.NavBarBg,
                         tonalElevation = 0.dp,
@@ -205,6 +274,16 @@ fun HexaminerApp(
                 }
             },
         ) { padding ->
+            if (!sessionReady) {
+                LoginRequiredScreen(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    showGoogleConfigured = showGoogle,
+                    onGoogleSignIn = requestGoogleSignIn,
+                )
+                return@Scaffold
+            }
             NavHost(
                 navController = nav,
                 startDestination = "home",
@@ -240,12 +319,10 @@ fun HexaminerApp(
                                 }
                             }
                         },
-                        onGoogleSignIn = {
-                            signInLauncher.launch(googleClient.signInIntent)
-                        },
-                        onNewAnonymousSession = {
+                        onGoogleSignIn = requestGoogleSignIn,
+                        onSignOut = {
                             googleClient.signOut()
-                            vm.signOutAndReset()
+                            vm.signOutOfCloudAccount()
                         },
                     )
                 }

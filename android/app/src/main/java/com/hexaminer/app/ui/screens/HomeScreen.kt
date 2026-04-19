@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,12 +55,14 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
+import com.hexaminer.app.R
 import com.hexaminer.app.ui.theme.ButtonShape
 import com.hexaminer.app.ui.theme.MintBrand
 import com.hexaminer.app.ui.theme.MintCtaButton
@@ -68,6 +71,13 @@ import com.hexaminer.app.ui.theme.ThumbnailShape
 import com.hexaminer.app.util.createTempPictureUri
 
 private const val MAX_IMAGES = 12
+
+private fun sessionSummaryText(raw: String): String =
+    when {
+        raw.contains("@") -> "Cuenta: $raw"
+        raw.matches(Regex("^[0-9]{8,30}$")) -> "Google · ${raw.take(12)}…"
+        else -> "Sesión: ${raw.take(12)}…"
+    }
 
 private fun Modifier.dashedMintBorder(corner: Dp) = drawWithContent {
     drawContent()
@@ -96,7 +106,7 @@ fun HomeScreen(
     onCaptureReady: (android.net.Uri) -> Unit,
     onAnalyzePending: () -> Unit,
     onGoogleSignIn: () -> Unit,
-    onNewAnonymousSession: () -> Unit,
+    onSignOut: () -> Unit,
 ) {
     val context = LocalContext.current
     var pendingCaptureUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -165,13 +175,20 @@ fun HomeScreen(
                                 menuOpen = false
                                 onGoogleSignIn()
                             },
+                            leadingIcon = {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_google_g),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("Nueva sesión anónima") },
+                        text = { Text("Cerrar sesión") },
                         onClick = {
                             menuOpen = false
-                            onNewAnonymousSession()
+                            onSignOut()
                         },
                     )
                 }
@@ -387,7 +404,7 @@ fun HomeScreen(
         Spacer(Modifier.height(20.dp))
         userLabel?.let { id ->
             Text(
-                text = "Sesión: ${id.take(14)}…",
+                text = sessionSummaryText(id),
                 style = MaterialTheme.typography.labelSmall,
                 color = MintBrand.Muted,
             )

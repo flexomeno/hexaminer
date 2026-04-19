@@ -2,5 +2,10 @@
 <resources>
     <string name="app_name">Hexaminer</string>
     <!-- Web client ID de Google Cloud (OAuth 2.0). Vacío = sin botón "Entrar con Google". -->
-    <string name="default_web_client_id" translatable="false"></string>
+    <string name="default_web_client_id" translatable="false">953779948074-aesm0neplqq2t4ebt0sa39deicg8gl3v.apps.googleusercontent.com</string>
+    <string name="login_required_title">Inicia sesión</string>
+    <string name="login_required_body">Para guardar tus escaneos y tu lista de compra en la nube, entra con Google. Sin sesión, no se guardan en tu cuenta.</string>
+    <string name="login_required_cta_google">Entrar con Google</string>
+    <string name="login_required_missing_web_client">Falta configurar default_web_client_id (OAuth) en strings.xml.</string>
+    <string name="login_version">Versión %1$s</string>
 </resources>
