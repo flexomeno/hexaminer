@@ -100,6 +100,13 @@ fun ProductDetailScreen(
                 SectionCard("Recomendación", product.recommendation)
             }
             item {
+                SectionCard(
+                    "Información",
+                    "Para evitar duplicados, intenta escanear el código de barras. " +
+                        "Si no se detecta, Hexaminer identifica el producto con un hash generado.",
+                )
+            }
+            item {
                 SectionCard("Resumen disruptores", product.disruptorsSummary)
             }
             item {

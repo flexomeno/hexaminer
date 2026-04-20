@@ -24,6 +24,9 @@ const handlers = [
   { name: "addShoppingListItem", entry: "src/handlers/addShoppingListItem.ts" },
   { name: "resetUserSession", entry: "src/handlers/resetUserSession.ts" },
   { name: "regradeProducts", entry: "src/handlers/regradeProducts.ts" },
+  { name: "getAppAndroidConfig", entry: "src/handlers/getAppAndroidConfig.ts" },
+  { name: "registerFcmToken", entry: "src/handlers/registerFcmToken.ts" },
+  { name: "sendPushNotification", entry: "src/handlers/sendPushNotification.ts" },
 ];
 
 for (const h of handlers) {

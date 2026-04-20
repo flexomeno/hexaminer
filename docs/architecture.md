@@ -1,179 +1,96 @@
-# Arquitectura Serverless - Product Analyzer
+# Arquitectura actual de Hexaminer
 
-## Estructura de carpetas
+Documento de alto nivel para la arquitectura desplegada (AWS + app web + app Android) y el flujo de análisis/cache.
+
+## Vista general
 
 ```text
-apps/web                      # Frontend Next.js (App Router)
-  app/
-    api/auth/[...nextauth]
-    camera
-    dashboard
-  components/
-  lib/
-  types/
-
-services/api                  # Código de Lambdas (TypeScript)
-  src/handlers
-  src/lib                     # openai.ts (prompt), dynamo.ts, s3.ts, …
-  src/types
-  scripts                     # bundle-lambda-terraform.mjs; Python: regrade loop, búsqueda Dynamo
-  serverless.yml              # Despliegue alternativo con Serverless Framework
-
-terraform/                    # Infraestructura como código (recomendado en este repo)
-  *.tf                        # Ver terraform/README.md para lista de archivos
-
-ansible/                      # Playbooks para aprovisionar la EC2 opcional de verificación (ver ansible/README.md)
+apps/web            Frontend Next.js (cámara, dashboard, auth)
+android/            App nativa Compose (mismo HTTP API)
+services/api        Lambdas TypeScript (handlers + libs)
+terraform/          Infra AWS (API, Lambdas, S3, Dynamo, SQS, IAM)
+docs/               Guías técnicas y operativas
 ```
 
-## Infraestructura AWS
+## Infraestructura (Terraform recomendado)
 
-Hay **dos formas** de desplegar lo mismo conceptualmente:
+Componentes desplegados en `terraform/`:
 
-### A) Terraform (recomendado)
+- API Gateway HTTP (`$default`) con rutas a Lambdas.
+- Lambdas Node.js 20 (HTTP, worker SQS y función operativa sin ruta).
+- SQS principal + DLQ para análisis asíncronos.
+- DynamoDB single-table (`PK`, `SK`, `GSI1PK`, `GSI1SK`).
+- S3 privado para imágenes (PUT por URL prefirmada, CORS configurable).
+- IAM para ejecución Lambda (CloudWatch, Dynamo, S3, SQS).
 
-Directorio `terraform/`: define API Gateway HTTP, Lambdas, DynamoDB, S3, IAM, CORS en S3 para subidas desde el navegador. Lista detallada de archivos en **`terraform/README.md`**.
+`services/api/serverless.yml` existe como alternativa, pero el flujo principal documentado del repo es Terraform.
 
-- **API Gateway HTTP API** con CORS abierto para el API.
-- **Lambdas**: rutas HTTP (tabla abajo), worker **`processAnalysisJob`** ligado a **SQS**, y **`regradeProducts`** (solo invocación directa; no expuesta en API Gateway).
-- **SQS**: cola (y DLQ) para encolar análisis asíncronos (`startAnalyzeJob` → `processAnalysisJob`).
-- **DynamoDB**: una tabla (`PK`, `SK`) + GSI1.
-- **S3**: bucket privado, cifrado, política TLS, **CORS** para `PUT` desde orígenes del front (p. ej. `localhost:3000`).
-- **IAM**: rol de Lambda con logs, DynamoDB, S3 del bucket y SQS según política en `terraform/iam.tf`.
+## Endpoints HTTP activos
 
-### B) Serverless Framework
+| Método | Ruta | Función |
+|---|---|---|
+| POST | `/analyze-product` | análisis síncrono |
+| POST | `/analyze-product/start` | crea job y encola en SQS |
+| GET | `/analyze-product/job` | consulta estado de job |
+| POST | `/upload-url` | URL prefirmada para S3 |
+| GET | `/product` | producto por uid |
+| GET | `/dashboard` | historial + canasta + jobs pendientes |
+| POST | `/shopping-list/items` | agrega producto a canasta |
+| POST | `/shopping-list/evaluate` | evalúa canasta |
+| POST | `/shopping-list/reset` | limpia canasta y/o historial |
+| GET | `/app/android-config` | config pública de versión Android |
+| POST | `/user/fcm-token` | registra token FCM por usuario |
+| POST | `/notifications/send` | envía push (protegida por secreto) |
 
-Archivo principal: `services/api/serverless.yml` — mismos recursos lógicos; **no** incluye la configuración CORS de S3 del repo Terraform (si usas solo Serverless, puede hacer falta configurar CORS del bucket manualmente para la subida desde el navegador).
+Funciones sin ruta:
 
-### Endpoints HTTP
+- `processAnalysisJob`: consumidora de SQS.
+- `regradeProducts`: operación manual por `aws lambda invoke`.
 
-| Método y ruta | Handler |
-|---------------|---------|
-| `POST /analyze-product` | `analyzeProduct` |
-| `POST /analyze-product/start` | `startAnalyzeJob` |
-| `GET /analyze-product/job` | `getAnalyzeJob` |
-| `POST /upload-url` | `getUploadUrl` |
-| `GET /product` | `getProduct` |
-| `GET /dashboard` | `getUserDashboard` |
-| `POST /shopping-list/items` | `addShoppingListItem` |
-| `POST /shopping-list/evaluate` | `evaluateShoppingList` |
-| `POST /shopping-list/reset` | `resetUserSession` |
+## Single-table en DynamoDB
 
-### Análisis asíncrono (SQS)
+### Claves
 
-1. El cliente llama `POST /analyze-product/start`; la Lambda encola un mensaje en SQS.
-2. `processAnalysisJob` consume la cola, ejecuta el pipeline de análisis y persiste en DynamoDB.
-3. El cliente consulta progreso con `GET /analyze-product/job` (parámetros según implementación del handler).
+- `PK` (partition key), `SK` (sort key).
+- `GSI1PK`, `GSI1SK` (accesos secundarios).
 
-### Operación: regrade masivo (`regradeProducts`)
+### Entidades principales
 
-Lambda **sin URL pública**: sirve para **re-ejecutar el modelo** con el prompt desplegado usando datos ya almacenados (texto/JSON previo), actualizando el mismo ítem `PRODUCT#uid` / `PROFILE`. Útil tras cambiar `openai.ts` sin borrar la tabla. Detalle de payload, límites por invocación y scripts: **`services/api/README.md`**.
+- Producto: `PK = PRODUCT#<uid>`, `SK = PROFILE`.
+- Perfil de usuario: `PK = USER#<userId>`, `SK = PROFILE`.
+- Historial de scans: `PK = USER#<userId>`, `SK = SCAN#<timestamp>#<uid>`.
+- Item de canasta: `PK = USER#<userId>`, `SK = SHOPPING#<uid>`.
+- Job async: `PK = JOB#<jobId>`, `SK = META` + referencia en `USER#...`.
 
-## Prompt de OpenAI
+## Flujo de análisis y deduplicación
 
-Definido en **`services/api/src/lib/openai.ts`** (`SYSTEM_PROMPT` y mensajes de usuario). Tras cambiarlo, hay que **volver a desplegar** las Lambdas (p. ej. `npm run build:terraform` + `terraform apply` en `terraform/`).
+1. Cliente pide `/upload-url` y sube imagen(es) a S3.
+2. Cliente llama `/analyze-product` o `/analyze-product/start`.
+3. Pipeline descarga imágenes y calcula UID:
+   - barcode detectado (`8-14` dígitos) -> UID barcode,
+   - si no hay barcode -> fallback desde imagen/keys,
+   - antes de guardar, se genera UID canónico `NAME#<hash>` con `marca|nombre|categoría` para reducir duplicados sin barcode.
+4. Busca `PRODUCT#uid`:
+   - existe -> responde caché (`source = "cache"`),
+   - no existe -> llama OpenAI, guarda producto y responde (`source = "openai"`).
+5. Registra scan del usuario y actualiza canasta según flujo.
 
-## DynamoDB Single Table Design
+## Push notifications (FCM)
 
-### Claves base
+- Android registra token en `/user/fcm-token`.
+- `sendPushNotification` valida header `X-Hexaminer-Push-Secret`.
+- Luego usa FCM HTTP v1 con `FCM_SERVICE_ACCOUNT_JSON`.
+- Requisito clave: `project_id` de la cuenta de servicio debe coincidir con el proyecto de `google-services.json` de la app.
 
-- `PK` (partition key)
-- `SK` (sort key)
-- `GSI1PK`, `GSI1SK` para accesos alternos.
+Guía operativa: [`push-fcm-setup.md`](push-fcm-setup.md).
 
-### Entidades
+## Variables de entorno
 
-1. **Producto**
-   - `PK = PRODUCT#{uid}`
-   - `SK = PROFILE`
-   - `GSI1PK = BARCODE#{uid}`
-   - `GSI1SK = PRODUCT`
-   - `entityType = PRODUCT`
-   - Campos principales: `name`, `brand`, `category`, `ingredients`, `score`, `chemical_analysis`, `verdict`, `recommendation`, `analysis_raw` (JSON completo del análisis cuando existe), `last_updated`, etc. La marca suele ir en `brand` y el nombre comercial en `name` (búsquedas por texto deben considerar ambos).
+- Las variables globales y específicas por Lambda están detalladas en [`services/api/README.md`](../services/api/README.md).
+- Terraform las inyecta desde `terraform/lambda.tf` y `terraform/locals.tf`.
 
-2. **Usuario perfil**
-   - `PK = USER#{userId}`
-   - `SK = PROFILE`
-   - `GSI1PK = USER#{userId}`
-   - `GSI1SK = PROFILE`
-   - Campos: `email, name, image, created_at, updated_at, total_scans`.
+## Notas de seguridad
 
-3. **Historial de escaneos**
-   - `PK = USER#{userId}`
-   - `SK = SCAN#{timestamp}#{uid}`
-   - `GSI1PK = USER#{userId}`
-   - `GSI1SK = SCAN#{timestamp}#{uid}`
-
-4. **Shopping list item**
-   - `PK = USER#{userId}`
-   - `SK = SHOPPING#{uid}`
-   - `GSI1PK = PRODUCT#{uid}`
-   - `GSI1SK = USER#{userId}`
-
-## Flujo cache-first (`analyzeProduct`)
-
-1. Frontend sube una o varias imágenes a S3 (`/upload-url` por archivo).
-2. Frontend llama `/analyze-product` con `imageKey` (una) o `imageKeys` (varias, máx. 12), o usa el flujo **asíncrono** (`/analyze-product/start` + `/analyze-product/job`).
-3. Lambda:
-   - descarga todas las imágenes de S3,
-   - extrae UID (barcode en cualquier foto, fallback hash estable del conjunto de bytes),
-   - busca en DynamoDB por `PRODUCT#{uid}`.
-4. Si existe:
-   - retorna producto cacheado (`source = "cache"`),
-   - registra scan en historial del usuario.
-5. Si no existe:
-   - llama OpenAI (`gpt-4o`) con prompt experto y salida JSON estricta,
-   - guarda en tabla Products,
-   - actualiza historial del usuario,
-   - retorna resultado (`source = "openai"`).
-
-Para **actualizar** análisis ya guardados tras cambiar el prompt, ver Lambda `regradeProducts` en **`services/api/README.md`**.
-
-## Shopping List Evaluator
-
-`POST /shopping-list/evaluate`
-
-- Calcula:
-  - `listSize`
-  - `averageScore`
-  - `riskProductCount`
-  - `riskPercentage`
-  - `basketGrade` (`CANASTA_SALUDABLE|MIXTA|CRITICA`)
-  - `tooManyEndocrineRisk` (umbral >= 40%)
-- Devuelve recomendación accionable.
-
-## Frontend UX (Next.js)
-
-- **Android:** carpeta `android/`: app nativa (Jetpack Compose) que consume el mismo HTTP API. Ver `android/README.md`.
-
-- `/camera`: captura/subida de foto, análisis, render del resultado.
-- `/dashboard`: historial + resumen de canasta.
-- Componente `ScoreRing` (estilo Shadcn custom):
-  - `0-7`: rojo
-  - `8-14`: amarillo
-  - `15-20`: verde
-
-## Variables de entorno clave
-
-### Backend (Lambda en ejecución)
-
-Inyectadas por Terraform/Serverless en la Lambda:
-
-- `TABLE_NAME`
-- `BUCKET_NAME`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL` (default: `gpt-4o`)
-
-### Despliegue Terraform (solo en tu máquina / CI)
-
-- `TF_VAR_openaikey` → variable Terraform `openaikey` → se mapea a `OPENAI_API_KEY` en las Lambdas
-
-### Frontend (`apps/web`)
-
-- `NEXT_PUBLIC_API_BASE_URL`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `NEXTAUTH_SECRET`
-
-## Nota de seguridad IAM/S3
-
-El bucket permanece privado. Solo la Lambda con su rol IAM tiene permisos de `GetObject`/`PutObject` sobre `arn:aws:s3:::<bucket>/*`.
+- Bucket S3 privado (acceso por IAM de Lambda y URLs prefirmadas).
+- `/notifications/send` no debe usarse sin secreto fuerte.
+- Si expones secretos accidentalmente (terminal/chat), rótalos.

@@ -182,6 +182,10 @@ resource "aws_instance" "verification" {
   }
 
   lifecycle {
+    # Tras crear la instancia, `terraform apply` no la modifica ni la sustituye (p. ej. AMI nueva).
+    # Para forzar otra VM: `terraform apply -replace='aws_instance.verification[0]'` o taint del recurso.
+    ignore_changes = all
+
     precondition {
       condition     = !var.verify_ec2_enabled || try(local.verification_key_name, "") != ""
       error_message = "Con verify_ec2_enabled=true: activa verify_ec2_generate_ssh_key, o define verify_ec2_public_key, o verify_ec2_existing_key_name."

@@ -2,3 +2,5 @@
 # Debe incluir el prefijo de etapa si aplica, y terminar SIN barra final.
 # Ejemplo: https://abcd1234.execute-api.us-east-1.amazonaws.com
 hexaminer.api.baseUrl=https://dfnjff8wn5.execute-api.us-east-1.amazonaws.com
+
+# Push FCM: coloca app/google-services.json (Firebase). Ver docs/push-fcm-setup.md en el repo.

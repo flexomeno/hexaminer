@@ -164,4 +164,20 @@ class HexaminerRepository(context: Context) {
                 ),
             )
         }
+
+    /** Config remota (versión / avisos). null si la API no responde. */
+    suspend fun fetchAndroidAppConfig(): AndroidAppConfigDto? =
+        withContext(Dispatchers.IO) {
+            try {
+                api.getAndroidAppConfig()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+    suspend fun registerFcmToken(userId: String, fcmToken: String) {
+        withContext(Dispatchers.IO) {
+            api.registerFcmToken(userId, FcmTokenRegisterRequest(fcmToken))
+        }
+    }
 }

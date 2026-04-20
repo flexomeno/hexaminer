@@ -38,6 +38,41 @@ Despliega en tu cuenta AWS: **DynamoDB** (single-table + GSI1), **S3** (privado,
 | `s3_cors_allowed_origins` | Orígenes permitidos para subir fotos desde el navegador (por defecto `localhost:3000`). Añade `https://tu-dominio` en producción |
 | `openai_model` | Modelo (p. ej. `gpt-4o`); debe coincidir con lo que soporte tu cuenta |
 
+## Variables de entorno de Lambda (inyectadas por Terraform)
+
+`lambda.tf` define variables globales para todas las funciones:
+
+- `TABLE_NAME`
+- `BUCKET_NAME`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+
+Y `locals.tf` agrega variables específicas por función (`extra_env`), por ejemplo:
+
+- `ANALYZE_JOBS_QUEUE_URL` (`startAnalyzeJob`)
+- `ANDROID_LATEST_VERSION_CODE`, `ANDROID_LATEST_VERSION_NAME`, `ANDROID_PLAY_STORE_URL` (`getAppAndroidConfig`)
+- `FCM_SERVICE_ACCOUNT_JSON`, `PUSH_NOTIFICATION_SECRET` (`sendPushNotification`)
+- `REGRADE_DELAY_MS` (`regradeProducts`)
+
+## Matriz de funciones (ruta, recursos y env extra)
+
+| Lambda | Trigger | Timeout / RAM | `extra_env` |
+|---|---|---|---|
+| `analyzeProduct` | `POST /analyze-product` | `120s` / `2048MB` | `-` |
+| `startAnalyzeJob` | `POST /analyze-product/start` | `30s` / `256MB` | `ANALYZE_JOBS_QUEUE_URL` |
+| `getAnalyzeJob` | `GET /analyze-product/job` | `15s` / `256MB` | `-` |
+| `processAnalysisJob` | SQS | `120s` / `2048MB` | `-` |
+| `getUploadUrl` | `POST /upload-url` | `10s` / `256MB` | `-` |
+| `evaluateShoppingList` | `POST /shopping-list/evaluate` | `10s` / `256MB` | `-` |
+| `getUserDashboard` | `GET /dashboard` | `10s` / `256MB` | `-` |
+| `getProduct` | `GET /product` | `10s` / `256MB` | `-` |
+| `addShoppingListItem` | `POST /shopping-list/items` | `10s` / `256MB` | `-` |
+| `resetUserSession` | `POST /shopping-list/reset` | `30s` / `256MB` | `-` |
+| `getAppAndroidConfig` | `GET /app/android-config` | `5s` / `256MB` | `ANDROID_LATEST_VERSION_CODE`, `ANDROID_LATEST_VERSION_NAME`, `ANDROID_PLAY_STORE_URL` |
+| `registerFcmToken` | `POST /user/fcm-token` | `10s` / `256MB` | `-` |
+| `sendPushNotification` | `POST /notifications/send` | `30s` / `256MB` | `FCM_SERVICE_ACCOUNT_JSON`, `PUSH_NOTIFICATION_SECRET` |
+| `regradeProducts` | Invoke directo | `300s` / `1024MB` | `REGRADE_DELAY_MS` |
+
 ## Pasos de despliegue
 
 1. **Bundles de Lambda** (obligatorio antes de `plan`/`apply`):
@@ -73,6 +108,21 @@ terraform apply
 cd ../services/api && npm run build:terraform
 cd ../terraform && terraform apply
 ```
+
+### Apply con `-target` (evitar tocar otras Lambdas)
+
+Cuando quieras actualizar solo una o pocas funciones (por ejemplo para no reescribir env vars de push por accidente):
+
+```bash
+terraform plan \
+  -target='aws_lambda_function.handlers["analyzeProduct"]' \
+  -target='aws_lambda_function.handlers["processAnalysisJob"]' \
+  -out=tfplan-target
+
+terraform apply tfplan-target
+```
+
+Recomendado antes de cambios sensibles (`sendPushNotification`): respaldar env vars actuales con `aws lambda get-function-configuration`.
 
 ## Outputs
 

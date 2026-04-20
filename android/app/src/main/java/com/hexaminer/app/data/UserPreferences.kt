@@ -15,6 +15,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 private val USER_ID_KEY = stringPreferencesKey("user_id")
 private val CLOUD_LOGIN_KEY = booleanPreferencesKey("cloud_login_completed")
+private val PENDING_FCM_TOKEN_KEY = stringPreferencesKey("pending_fcm_token")
 
 class UserPreferences(private val context: Context) {
 
@@ -50,5 +51,20 @@ class UserPreferences(private val context: Context) {
             prefs.remove(USER_ID_KEY)
             prefs[CLOUD_LOGIN_KEY] = false
         }
+    }
+
+    suspend fun setPendingFcmToken(token: String) {
+        context.dataStore.edit { it[PENDING_FCM_TOKEN_KEY] = token.trim() }
+    }
+
+    suspend fun consumePendingFcmToken(): String? {
+        val prefs = context.dataStore.data.first()
+        val v = prefs[PENDING_FCM_TOKEN_KEY]?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        context.dataStore.edit { it.remove(PENDING_FCM_TOKEN_KEY) }
+        return v
+    }
+
+    suspend fun clearPendingFcmToken() {
+        context.dataStore.edit { it.remove(PENDING_FCM_TOKEN_KEY) }
     }
 }

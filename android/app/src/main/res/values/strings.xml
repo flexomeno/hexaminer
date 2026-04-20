@@ -8,4 +8,8 @@
     <string name="login_required_cta_google">Entrar con Google</string>
     <string name="login_required_missing_web_client">Falta configurar default_web_client_id (OAuth) en strings.xml.</string>
     <string name="login_version">Versión %1$s</string>
+    <string name="banner_update_title">Actualización disponible</string>
+    <string name="banner_update_body_named">Hay una versión más reciente (%1$s) en Play Store.</string>
+    <string name="banner_update_body_generic">Hay una versión más reciente en Play Store.</string>
+    <string name="banner_update_cta">Actualizar</string>
 </resources>

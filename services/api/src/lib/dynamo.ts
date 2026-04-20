@@ -317,6 +317,40 @@ export async function ensureUserProfile(params: {
   );
 }
 
+export async function setUserFcmToken(params: { userId: string; token: string }): Promise<void> {
+  const t = params.token.trim();
+  if (t.length < 20 || t.length > 4096) {
+    throw new Error("Invalid FCM token length");
+  }
+  const timestamp = nowIso();
+  await doc.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: {
+        PK: userPk(params.userId),
+        SK: "PROFILE",
+      },
+      UpdateExpression: "SET fcm_token = :t, fcm_token_updated_at = :ts",
+      ExpressionAttributeValues: {
+        ":t": t,
+        ":ts": timestamp,
+      },
+    }),
+  );
+}
+
+export async function getUserFcmToken(userId: string): Promise<string | undefined> {
+  const result = await doc.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: userPk(userId), SK: "PROFILE" },
+      ProjectionExpression: "fcm_token",
+    }),
+  );
+  const v = result.Item?.fcm_token;
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
 export async function upsertUserScan(params: {
   userId: string;
   productUid: string;

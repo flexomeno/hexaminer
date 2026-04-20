@@ -384,8 +384,8 @@ fun HomeScreen(
                     modifier = Modifier.size(22.dp),
                 )
             },
-            text = "Añade fotos de la etiqueta del producto. Puedes capturar el frente, " +
-                "el reverso y cualquier parte donde se vean los ingredientes o la información nutricional.",
+            text = "Añade fotos claras de la etiqueta y, de ser posible, incluye el código de barras. " +
+                "Puedes capturar el frente, el reverso y cualquier parte donde se vean los ingredientes o la información nutricional.",
         )
         Spacer(Modifier.height(12.dp))
         MintInfoCard(
@@ -397,8 +397,8 @@ fun HomeScreen(
                     modifier = Modifier.size(22.dp),
                 )
             },
-            text = "Las puntuaciones se basan en información científica disponible. " +
-                "Esta app es solo informativa y no sustituye el consejo de un profesional de la salud.",
+            text = "Si no se detecta el código de barras, el sistema usa un hash generado para identificar el producto. " +
+                "Las puntuaciones se basan en información científica disponible y no sustituyen el consejo de un profesional de la salud.",
         )
 
         Spacer(Modifier.height(20.dp))

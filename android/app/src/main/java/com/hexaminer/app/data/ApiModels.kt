@@ -171,3 +171,17 @@ data class ResetClearedDto(
 data class ResetSessionResponse(
     val cleared: ResetClearedDto,
 )
+
+/** Respuesta de GET /app/android-config (pública). */
+@Serializable
+data class AndroidAppConfigDto(
+    val latestVersionCode: Int = 0,
+    val latestVersionName: String? = null,
+    val playStoreUrl: String? = null,
+)
+
+@Serializable
+data class FcmTokenRegisterRequest(val fcmToken: String)
+
+@Serializable
+data class OkResponse(val ok: Boolean = true)

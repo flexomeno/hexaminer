@@ -6,6 +6,15 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface HexaminerApi {
+    @GET("app/android-config")
+    suspend fun getAndroidAppConfig(): AndroidAppConfigDto
+
+    @POST("user/fcm-token")
+    suspend fun registerFcmToken(
+        @Query("userId") userId: String?,
+        @Body body: FcmTokenRegisterRequest,
+    ): OkResponse
+
     @POST("upload-url")
     suspend fun uploadUrl(@Body body: UploadUrlRequest): UploadUrlResponse
 

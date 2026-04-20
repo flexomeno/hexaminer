@@ -1,75 +1,103 @@
 # Backend API (AWS Lambda)
 
-Código TypeScript de las funciones serverless: análisis con OpenAI (visión), lectura/escritura en **DynamoDB** (single-table), **S3** (presign), cola **SQS** para análisis asíncronos y utilidades de operación (regrade por lotes).
+Backend TypeScript ejecutado en Lambda: análisis de imágenes con OpenAI, persistencia en DynamoDB (single-table), presigned upload en S3, pipeline asíncrono con SQS y utilidades operativas.
 
 ## Requisitos
 
-- **Node.js 20** (alineado con el runtime Lambda en Terraform)
-- `npm install` en este directorio
+- Node.js 20 (mismo runtime que Lambda en Terraform).
+- `npm install` en este directorio.
 
 ## Scripts npm
 
 | Comando | Descripción |
 |---------|-------------|
-| `npm run build` | Compila TypeScript a `dist/` (desarrollo local). |
-| `npm run build:terraform` | Genera bundles ZIP bajo `terraform/.build/` para `terraform apply` (ver `scripts/bundle-lambda-terraform.mjs`). |
+| `npm run build` | Alias de `build:terraform`. |
+| `npm run build:terraform` | Bundlea cada handler en `terraform/.build/lambda/` (script `scripts/bundle-lambda-terraform.mjs`). |
+| `npm run package:serverless` | Ejecuta `serverless package` (flujo alternativo). |
 
-Tras cambiar handlers, `openai.ts`, `dynamo.ts`, etc.: `npm run build:terraform` y luego `terraform apply` en `../terraform`.
+Tras cambios en `src/`, vuelve a ejecutar `npm run build:terraform` y `terraform apply` en `../terraform`.
 
 ## Estructura
 
 ```text
-src/handlers/     # Punto de entrada por Lambda (exports handler)
-src/lib/          # openai.ts, dynamo.ts, s3.ts, config, merge, …
-src/types/        # Tipos de dominio compartidos
-scripts/          # bundle-lambda-terraform.mjs + herramientas Python (operación)
-serverless.yml    # Despliegue alternativo con Serverless Framework
+src/handlers/     Entrypoint por Lambda (export handler)
+src/lib/          Config, OpenAI, Dynamo, S3, pipeline, utilidades
+src/types/        Tipos de dominio
+scripts/          Bundle Terraform + scripts Python de operación
+serverless.yml    Alternativa de despliegue con Serverless Framework
 ```
 
-## Lambdas y rutas HTTP
+## Variables de entorno (fuente de verdad)
 
-Definidas en `terraform/locals.tf` (deben coincidir con las carpetas que empaqueta `bundle-lambda-terraform.mjs`).
+### Globales (todas las Lambdas en Terraform)
 
-| Función | Ruta HTTP | Notas |
-|---------|-----------|--------|
-| `analyzeProduct` | `POST /analyze-product` | Visión + caché; puede usar flujo síncrono. |
-| `startAnalyzeJob` | `POST /analyze-product/start` | Encola trabajo en SQS. |
-| `getAnalyzeJob` | `GET /analyze-product/job` | Consulta estado del job. |
-| `getUploadUrl` | `POST /upload-url` | URL prefirmada para subir imagen a S3. |
-| `getProduct` | `GET /product` | Producto por uid. |
-| `getUserDashboard` | `GET /dashboard` | Historial / resumen. |
-| `addShoppingListItem` | `POST /shopping-list/items` | |
-| `evaluateShoppingList` | `POST /shopping-list/evaluate` | |
-| `resetUserSession` | `POST /shopping-list/reset` | |
-| `processAnalysisJob` | *(ninguna)* | Disparada por **SQS** (worker). |
-| `regradeProducts` | *(ninguna)* | Solo **`aws lambda invoke`** (re-análisis masivo por texto; no exponer en HTTP). |
+Definidas en `terraform/lambda.tf`:
 
-Timeouts y memoria concretos están en `locals.tf`.
+- `TABLE_NAME` (obligatoria en runtime).
+- `BUCKET_NAME` (obligatoria en runtime).
+- `OPENAI_API_KEY`.
+- `OPENAI_MODEL` (default Terraform: `gpt-4o`).
 
-## Regrade de productos (`regradeProducts`)
+Variables usadas por runtime (`src/lib/config.ts` y handlers):
 
-Sirve para **volver a ejecutar el análisis** con el **prompt actual** usando solo datos ya guardados (JSON previo / perfil), sin imágenes. Escribe en el **mismo** ítem `PRODUCT#<uid>` / `SK = PROFILE` vía `putProductAnalysis` (no duplica filas).
+- `OPENAI_MAX_OUTPUT_TOKENS` (opcional; default 16384 si no existe o no es válido).
+- `ANALYZE_JOBS_QUEUE_URL` (obligatoria para `startAnalyzeJob`).
+- `ANDROID_LATEST_VERSION_CODE`, `ANDROID_LATEST_VERSION_NAME`, `ANDROID_PLAY_STORE_URL` (`getAppAndroidConfig`).
+- `FCM_SERVICE_ACCOUNT_JSON`, `PUSH_NOTIFICATION_SECRET` (`sendPushNotification`).
+- `REGRADE_DELAY_MS` (`regradeProducts`).
 
-**Nombre de la función:** `{project_name}-{stage}-regradeProducts` (por defecto Terraform: `product-analysis-api-dev-regradeProducts`).
+### Matriz por Lambda (trigger, contrato y env)
 
-**Payload** (JSON en invoke directo):
+| Lambda | Trigger / Ruta | Contrato resumido | Variables críticas |
+|---|---|---|---|
+| `analyzeProduct` | `POST /analyze-product` | Body `imageKey` o `imageKeys[]` (máx. 12), opcional `userId`; procesa síncrono y retorna `{source, uid, product}`. | `TABLE_NAME`, `BUCKET_NAME`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MAX_OUTPUT_TOKENS` (opcional). |
+| `startAnalyzeJob` | `POST /analyze-product/start` | Body `imageKey` o `imageKeys[]`; crea job y encola en SQS; retorna `202` con `jobId`. | Todo lo anterior + `ANALYZE_JOBS_QUEUE_URL` (obligatoria). |
+| `getAnalyzeJob` | `GET /analyze-product/job` | Query `jobId` (o `job_id`); responde estado y producto cuando completó. | `TABLE_NAME`. |
+| `processAnalysisJob` | SQS (sin ruta HTTP) | Consume mensajes `{jobId,userId,imageKeys}`; ejecuta pipeline y actualiza estado de job. | `TABLE_NAME`, `BUCKET_NAME`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MAX_OUTPUT_TOKENS` (opcional). |
+| `getUploadUrl` | `POST /upload-url` | Body opcional `fileName`,`contentType`; valida tipo imagen y retorna URL prefirmada + `key`. | `BUCKET_NAME`. |
+| `getProduct` | `GET /product` | Query `uid` obligatorio; retorna `product`. | `TABLE_NAME`. |
+| `getUserDashboard` | `GET /dashboard` | Query opcional `userId`; retorna `recent_scans`, `shopping_list`, `pending_jobs`, resumen. | `TABLE_NAME`. |
+| `addShoppingListItem` | `POST /shopping-list/items` | Body `uid` obligatorio, opcional `userId`; agrega item a canasta del usuario. | `TABLE_NAME`. |
+| `evaluateShoppingList` | `POST /shopping-list/evaluate` | Usa `userId` en query o body y devuelve evaluación de canasta. | `TABLE_NAME`. |
+| `resetUserSession` | `POST /shopping-list/reset` | Body opcional `shoppingList` (default true), `recentScans` (solo true explícito). | `TABLE_NAME`. |
+| `getAppAndroidConfig` | `GET /app/android-config` | Público; retorna `latestVersionCode`, `latestVersionName`, `playStoreUrl`. | `ANDROID_LATEST_VERSION_CODE`, `ANDROID_LATEST_VERSION_NAME`, `ANDROID_PLAY_STORE_URL` (opcionales). |
+| `registerFcmToken` | `POST /user/fcm-token` | Query/modelo de identidad + body `fcmToken`; persiste token en perfil de usuario. | `TABLE_NAME`. |
+| `sendPushNotification` | `POST /notifications/send` | Header `X-Hexaminer-Push-Secret` + body `{targetUserId,title,body}`; envía FCM v1. | `PUSH_NOTIFICATION_SECRET`, `FCM_SERVICE_ACCOUNT_JSON`, `TABLE_NAME`. |
+| `regradeProducts` | Invoke directo (sin ruta HTTP) | Reanaliza productos existentes por lotes usando prompt actual; soporta `resume`. | `TABLE_NAME`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MAX_OUTPUT_TOKENS` (opcional), `REGRADE_DELAY_MS` (opcional). |
+
+## Arquitectura funcional (cache-first + deduplicación)
+
+1. El cliente sube imágenes (`/upload-url` + PUT a S3).
+2. `analyzeProduct` o `processAnalysisJob` descargan bytes, extraen UID y buscan en `PRODUCT#<uid> / PROFILE`.
+3. Si existe, responden desde caché.
+4. Si no existe, llaman OpenAI y guardan análisis.
+5. Siempre registran scan del usuario.
+
+Regla actual de UID:
+
+- Si detecta barcode (`8-14` dígitos): UID = barcode.
+- Si no hay barcode: `extractUidFromImages` genera fallback, luego el pipeline genera un UID canónico `NAME#<hash>` con `marca|nombre|categoría` normalizados para reducir duplicados en reescaneos sin barcode.
+
+## Regrade (`regradeProducts`)
+
+Reanaliza con el prompt desplegado y escribe en el mismo item `PRODUCT#uid / PROFILE`.
+
+Nombre de función: `{project_name}-{stage}-regradeProducts` (default: `product-analysis-api-dev-regradeProducts`).
+
+Payload:
 
 | Campo | Descripción |
-|-------|-------------|
-| `dryRun` | `true`: no escribe en Dynamo. |
-| `maxProducts` | Cuántos productos procesar **por invocación** (default 5, máx. 25). |
-| `onlyUid` | Si se indica, solo ese uid (ignora scan y `resume`). |
-| `scanSegmentLimit` | Tamaño de segmento del Scan Dynamo (default 100). |
-| `delayMs` | Pausa entre productos (rate limit OpenAI); default desde env `REGRADE_DELAY_MS` en Lambda. |
-| `resume` | `{ "exclusiveStartKey": {...}, "skipInPage": n }` para continuar tras un corte o límite. |
+|---|---|
+| `dryRun` | Si `true`, no escribe en DynamoDB. |
+| `maxProducts` | Productos por invocación (`1-25`, default `5`). |
+| `onlyUid` | Reanaliza solo un uid específico. |
+| `scanSegmentLimit` | Tamaño de página de Scan Dynamo (default `100`). |
+| `delayMs` | Pausa entre productos (si falta, usa `REGRADE_DELAY_MS`). |
+| `resume` | `{ exclusiveStartKey, skipInPage }` para continuar. |
 
-Para **toda la tabla**, encadena invocaciones con `resume` hasta que la respuesta tenga `"finishedTable": true`, o usa el script Python (abajo).
+Para invocaciones largas en CLI AWS usa `--cli-read-timeout 0`.
 
-**Cliente AWS:** las invocaciones largas superan el timeout de lectura por defecto del CLI (~60 s). Usa `--cli-read-timeout 0` con `aws lambda invoke`, o el script con boto3.
-
-## Herramientas Python (`scripts/`)
-
-Requieren **boto3**. En macOS/Homebrew conviene un **venv** (PEP 668 impide `pip3 install` global):
+## Scripts Python (`scripts/`)
 
 ```bash
 cd services/api
@@ -79,22 +107,16 @@ pip install -r scripts/requirements-tools.txt
 ```
 
 | Script | Uso |
-|--------|-----|
-| `scripts/regrade_products_loop.py` | Invoca `regradeProducts` en tandas (`--batch-size` 1–25) hasta `finishedTable`. Flags: `--function-name`, `--region`, `--profile`, `--dry-run`, `--read-timeout`. |
-| `scripts/find_product_by_name.py` | Busca perfiles `PRODUCT#*` / `PROFILE` por subcadena en **name, brand o uid** (Scan paginado). Flags: `--table-name` / env `TABLE_NAME`, `--sample N` (diagnóstico), `--in any|name|brand|barcode`, `--exact`, `--json`. |
-
-Variable de entorno útil: `TABLE_NAME` (mismo nombre que output Terraform `dynamodb_table_name`).
-
-## Variables de entorno en Lambda
-
-Inyectadas por Terraform (ver `terraform/lambda.tf`): entre otras, `TABLE_NAME`, `BUCKET_NAME`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ANALYZE_JOBS_QUEUE_URL` (donde aplique), `REGRADE_DELAY_MS` (solo `regradeProducts`).
+|---|---|
+| `scripts/regrade_products_loop.py` | Regrade en loop hasta `finishedTable`. |
+| `scripts/find_product_by_name.py` | Busca `PRODUCT#* / PROFILE` por texto en `name`, `brand`, `uid`. |
 
 ## Serverless Framework
 
-`serverless.yml` define las mismas funciones de forma equivalente (incluida **`regradeProducts`**). La invocación de regrade sigue siendo **directa** (`serverless invoke` / consola AWS), no HTTP público. CORS de S3 puede requerir configuración manual si no usas Terraform.
+`serverless.yml` mantiene equivalencia funcional con Terraform, pero el flujo recomendado del repo es Terraform. Si despliegas con Serverless, revisa CORS de S3 manualmente.
 
-## Documentación relacionada
+## Referencias
 
-- [`../terraform/README.md`](../terraform/README.md) — despliegue, outputs, archivos `.tf`.
-- [`../docs/architecture.md`](../docs/architecture.md) — modelo DynamoDB, flujos, endpoints resumidos.
-- [`../README.md`](../README.md) — visión general del monorepo.
+- [`../terraform/README.md`](../terraform/README.md)
+- [`../docs/architecture.md`](../docs/architecture.md)
+- [`../docs/push-fcm-setup.md`](../docs/push-fcm-setup.md)

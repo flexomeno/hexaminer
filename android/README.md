@@ -28,6 +28,21 @@ Tras “Entrar con Google”, si la cuenta devuelve **email**, la app envía ese
 - Elegir imagen de galería o **tomar foto** (cámara + `FileProvider`).
 - Flujo: una o varias veces `POST /upload-url` + `PUT` → `POST /analyze-product` con `imageKeys` → intento de `POST /shopping-list/items`.
 - **Panel:** `GET /dashboard?userId=...` (escaneos recientes, lista, resumen de canasta).
+- Push FCM: registra token con `POST /user/fcm-token` y recibe notificaciones enviadas desde `POST /notifications/send`.
+
+## Recomendación de escaneo y deduplicación
+
+- Intenta incluir el **código de barras** en al menos una foto.
+- Si no se detecta barcode, el backend usa un UID canónico por `marca + nombre + categoría` para reducir duplicados de reescaneos sin código.
+- Aun así, mejor calidad de foto y barcode visible mejora la consistencia de caché.
+
+## Push (Firebase)
+
+1. Coloca `android/app/google-services.json`.
+2. Compila y abre la app; Android 13+ pedirá permiso de notificaciones.
+3. Inicia sesión para que el token se registre en backend (`fcm_token` en DynamoDB).
+
+Guía detallada: [`../docs/push-fcm-setup.md`](../docs/push-fcm-setup.md).
 
 ## Red
 

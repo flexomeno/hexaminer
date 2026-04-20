@@ -16,6 +16,7 @@ provider:
       allowedHeaders:
         - Content-Type
         - Authorization
+        - X-Hexaminer-Push-Secret
       allowedMethods:
         - GET
         - POST
@@ -24,6 +25,10 @@ provider:
     TABLE_NAME: ${self:service}-${self:provider.stage}
     BUCKET_NAME: ${self:service}-${self:provider.stage}-uploads
     OPENAI_MODEL: gpt-4o
+    # App Android (GET /app/android-config). 0 = sin aviso de nueva versión.
+    ANDROID_LATEST_VERSION_CODE: "0"
+    ANDROID_LATEST_VERSION_NAME: ""
+    ANDROID_PLAY_STORE_URL: ""
   iam:
     role:
       statements:
@@ -47,6 +52,30 @@ provider:
             - !Sub "arn:aws:s3:::${UploadsBucket}/*"
 
 functions:
+  getAppAndroidConfig:
+    handler: src/handlers/getAppAndroidConfig.handler
+    timeout: 5
+    events:
+      - httpApi:
+          path: /app/android-config
+          method: get
+  registerFcmToken:
+    handler: src/handlers/registerFcmToken.handler
+    timeout: 10
+    events:
+      - httpApi:
+          path: /user/fcm-token
+          method: post
+  sendPushNotification:
+    handler: src/handlers/sendPushNotification.handler
+    timeout: 30
+    environment:
+      FCM_SERVICE_ACCOUNT_JSON: ""
+      PUSH_NOTIFICATION_SECRET: ""
+    events:
+      - httpApi:
+          path: /notifications/send
+          method: post
   analyzeProduct:
     handler: src/handlers/analyzeProduct.handler
     timeout: 120

@@ -13,7 +13,8 @@ docs/              Arquitectura, single-table DynamoDB, flujos
 scripts/           Utilidades CLI en raíz (análisis desde imagen local, prueba OpenAI)
 ```
 
-La infra desplegada con **Terraform** incluye: **API Gateway HTTP**, **varias Lambdas** Node.js 20 (HTTP + worker SQS + `regradeProducts` solo invoke), **SQS** (cola de análisis asíncronos), **DynamoDB** (single-table + GSI1), **S3** (subidas con URL prefirmada + **CORS**), **IAM**. Detalle en [`terraform/README.md`](terraform/README.md) y backend en [`services/api/README.md`](services/api/README.md).
+La infra desplegada con **Terraform** incluye: **API Gateway HTTP**, **varias Lambdas** Node.js 20 (HTTP + worker SQS + `regradeProducts` solo invoke), **SQS** (cola de análisis asíncronos), **DynamoDB** (single-table + GSI1), **S3** (subidas con URL prefirmada + **CORS**), **IAM**.  
+Detalle en [`terraform/README.md`](terraform/README.md) y backend en [`services/api/README.md`](services/api/README.md) (incluye matriz de variables de entorno por Lambda).
 
 > **Alternativa:** también existe `services/api/serverless.yml` (Serverless Framework) para un despliegue equivalente; el flujo documentado en detalle para producción/dev en este repo es **Terraform**.
 
@@ -99,9 +100,15 @@ Si cambias el prompt y quieres **reevaluar productos ya guardados** sin borrar f
 
 ---
 
-## Caché (DynamoDB)
+## Caché y deduplicación (DynamoDB)
 
-Los productos analizados se guardan como filas `PRODUCT#<uid>` / `SK = PROFILE`. Mientras exista el ítem, el API puede devolver **caché** para ese uid. Para refrescar: borrar el ítem, usar la Lambda **`regradeProducts`** (lote, mismo prompt que el código desplegado) o el flujo descrito en arquitectura. Búsqueda operativa por nombre/marca: [`services/api/scripts/find_product_by_name.py`](services/api/scripts/find_product_by_name.py) (ver [`services/api/README.md`](services/api/README.md)).
+Los productos se guardan como `PRODUCT#<uid>` / `SK = PROFILE`.  
+Regla de UID actual:
+
+- Si hay barcode detectable (`8-14` dígitos), ese barcode es el UID.
+- Si no hay barcode, se usa un UID canónico basado en `marca + nombre + categoría` para reducir duplicados de reescaneo.
+
+Mientras exista el ítem, el API puede devolver **caché** para ese UID. Para refrescar: borrar el ítem, usar la Lambda **`regradeProducts`** o seguir el flujo de arquitectura. Búsqueda operativa por nombre/marca: [`services/api/scripts/find_product_by_name.py`](services/api/scripts/find_product_by_name.py).
 
 ---
 
@@ -122,7 +129,7 @@ Variables: `OPENAI_API_KEY` y las definidas en `serverless.yml`.
 | Documento | Contenido |
 |-----------|-----------|
 | [`services/api/README.md`](services/api/README.md) | Lambdas y rutas, SQS/async, `regradeProducts`, scripts Python |
-| [`docs/architecture.md`](docs/architecture.md) | Single-table DynamoDB, flujo cache-first, endpoints, Terraform vs Serverless, seguridad |
+| [`docs/architecture.md`](docs/architecture.md) | Arquitectura actual AWS + flujos de análisis, UID/caché y push |
 | [`terraform/README.md`](terraform/README.md) | Lista de `.tf`, variables, outputs, CORS, estado remoto |
 | [`terraform/terraform.tfvars.example`](terraform/terraform.tfvars.example) | Ejemplo de variables (no commitear secretos) |
 | [`android/README.md`](android/README.md) | App Android nativa (API URL, Google OAuth opcional) |

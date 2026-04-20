@@ -1,8 +1,13 @@
 package com.hexaminer.app.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
@@ -123,6 +128,29 @@ fun HexaminerApp(
         vm.clearInfoHint()
     }
 
+    val postNotifPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        vm.syncFcmTokenWithBackend(context.applicationContext)
+    }
+
+    LaunchedEffect(sessionReady) {
+        if (!sessionReady) return@LaunchedEffect
+        if (Build.VERSION.SDK_INT >= 33) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                vm.syncFcmTokenWithBackend(context.applicationContext)
+            } else {
+                postNotifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            vm.syncFcmTokenWithBackend(context.applicationContext)
+        }
+    }
+
     val pickMultiple = rememberLauncherForActivityResult(
         PickMultipleVisualMedia(MAX_IMAGES),
     ) { uris ->
@@ -200,6 +228,16 @@ fun HexaminerApp(
 
     HexaminerTheme {
         Scaffold(
+            topBar = {
+                RemoteAppConfigTopBar(
+                    config = ui.androidAppConfig,
+                    onOpenPlayStore = { url ->
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                        )
+                    },
+                )
+            },
             containerColor = MintBrand.Background,
             contentColor = MintBrand.Title,
             snackbarHost = { SnackbarHost(snackbar) },

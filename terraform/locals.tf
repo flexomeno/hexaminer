@@ -66,6 +66,31 @@ locals {
       memory    = 256
       extra_env = {}
     }
+    getAppAndroidConfig = {
+      route_key = "GET /app/android-config"
+      timeout   = 5
+      memory    = 256
+      extra_env = {
+        ANDROID_LATEST_VERSION_CODE = "0"
+        ANDROID_LATEST_VERSION_NAME = ""
+        ANDROID_PLAY_STORE_URL      = ""
+      }
+    }
+    registerFcmToken = {
+      route_key = "POST /user/fcm-token"
+      timeout   = 10
+      memory    = 256
+      extra_env = {}
+    }
+    sendPushNotification = {
+      route_key = "POST /notifications/send"
+      timeout   = 30
+      memory    = 256
+      extra_env = {
+        FCM_SERVICE_ACCOUNT_JSON = ""
+        PUSH_NOTIFICATION_SECRET = ""
+      }
+    }
     # Sin ruta HTTP: invocar con aws lambda invoke (evita abuso de OpenAI en público).
     regradeProducts = {
       route_key = null

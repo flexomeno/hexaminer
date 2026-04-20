@@ -25,8 +25,8 @@ android {
         applicationId = "com.hexaminer.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 9
+        versionName = "1.0.8"
         buildConfigField("String", "API_BASE_URL", "\"$hexApiBase\"")
     }
     buildTypes {
@@ -49,6 +49,11 @@ android {
         compose = true
         buildConfig = true
     }
+}
+
+// Igual que Firebase, pero solo si existe google-services.json (si no, el proyecto compila sin FCM).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 dependencies {
@@ -77,6 +82,10 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+
+    val firebaseBom = platform("com.google.firebase:firebase-bom:34.12.0")
+    implementation(firebaseBom)
+    implementation("com.google.firebase:firebase-messaging")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

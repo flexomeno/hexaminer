@@ -4,13 +4,15 @@
   "private": true,
   "description": "Serverless backend for product label analysis",
   "scripts": {
-    "build": "serverless package",
+    "build": "npm run build:terraform",
     "build:terraform": "node scripts/bundle-lambda-terraform.mjs",
+    "package:serverless": "serverless package",
     "deploy": "serverless deploy",
     "remove": "serverless remove",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "google-auth-library": "^9.15.1",
     "@aws-sdk/client-dynamodb": "^3.924.0",
     "@aws-sdk/client-s3": "^3.924.0",
     "@aws-sdk/client-sqs": "^3.1024.0",

@@ -1,9 +1,11 @@
 package com.hexaminer.app
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.hexaminer.app.data.AndroidAppConfigDto
 import com.hexaminer.app.data.DashboardResponse
 import com.hexaminer.app.data.HexaminerRepository
 import com.hexaminer.app.data.ProductDto
@@ -11,8 +13,13 @@ import com.hexaminer.app.data.UserPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.FirebaseApp
+import com.google.firebase.messaging.FirebaseMessaging
 
 data class AppUiState(
     val loading: Boolean = false,
@@ -22,6 +29,8 @@ data class AppUiState(
     val lastProduct: ProductDto? = null,
     val dashboard: DashboardResponse? = null,
     val userIdLabel: String? = null,
+    /** GET /app/android-config (versión en tienda). */
+    val androidAppConfig: AndroidAppConfigDto? = null,
 )
 
 class AppViewModel(
@@ -36,6 +45,41 @@ class AppViewModel(
         viewModelScope.launch {
             userPreferences.userId.collect { id ->
                 _ui.update { it.copy(userIdLabel = id) }
+            }
+        }
+        viewModelScope.launch {
+            refreshAndroidAppConfig()
+        }
+    }
+
+    /** Consulta la API pública (versión publicada en tienda). No requiere login. */
+    fun refreshAndroidAppConfig() {
+        viewModelScope.launch {
+            try {
+                val cfg = repository.fetchAndroidAppConfig()
+                _ui.update { it.copy(androidAppConfig = cfg) }
+            } catch (_: Exception) {
+                // no bloquear la app
+            }
+        }
+    }
+
+    /**
+     * Registra el token FCM en la API (Dynamo) cuando hay sesión y Firebase está configurado
+     * (`app/google-services.json`).
+     */
+    fun syncFcmTokenWithBackend(appContext: Context) {
+        viewModelScope.launch {
+            if (FirebaseApp.getApps(appContext).isEmpty()) return@launch
+            val uid = userPreferences.getUserIdForApi() ?: return@launch
+            try {
+                withContext(Dispatchers.IO) {
+                    val pending = userPreferences.consumePendingFcmToken()
+                    val token = pending ?: Tasks.await(FirebaseMessaging.getInstance().token)
+                    repository.registerFcmToken(uid, token)
+                }
+            } catch (_: Exception) {
+                // sin google-services o sin red: no bloquear
             }
         }
     }
